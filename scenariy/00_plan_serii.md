@@ -7,8 +7,8 @@
 | Часть | Название | Период | Хронометраж | Главные игры |
 |---|---|---|---|---|
 | 1 | «Нулевой уровень» | до 2005 | ~28–33 мин | Dendy/Sega/PS1, Сапёр и Косынка, Герои III, CS 1.6, Worms, Vice City, Мафия, Max Payne, Warcraft III и DotA, Diablo II, Serious Sam, Космические рейнджеры, Дальнобойщики и квесты, NFS Underground, Готика и Морровинд, Принц Персии, Half-Life 2, пиратские диски |
-| 2 | «Золотые болванки» | 2005–2007 | ~28–33 мин | GTA San Andreas, NFS Most Wanted, The Sims 2, Oblivion, «Игромания», CoD 2 и CoD 4, S.T.A.L.K.E.R., Hitman: Blood Money, Portal, BioShock, Crysis, Assassin's Creed, Ведьмак, Ex Machina и Корсары, мифы San Andreas |
-| 3 | «Всё сломалось и стало лучше» | 2008–2010 | ~28–33 мин | GTA IV, Fallout 3/NV, Left 4 Dead, Spore, Prototype, AC II, MW2, Batman: AA, флеш-игры, игры ВК, Java-игры, Angry Birds, PvZ, Метро 2033, Lineage/Аллоды, World of Tanks, Mafia II, NFS Hot Pursuit |
+| 2 | «Золотые болванки» | 2005–2008 | ~28–33 мин | **Переписана по гайду.** San Andreas, NFS Most Wanted, GTA IV, Oblivion, «Сталкер», Fallout 3, BioShock, Portal, Orange Box, Call of Duty 4, Crysis, «Игромания», Ведьмак, Ex Machina, «Мор», «Корсары», King's Bounty, Left 4 Dead; мимоходом — Assassin's Creed, Hitman, The Sims 2, Spore |
+| 3 | «Всё сломалось и стало лучше» | 2009–2010 (нужно переписать: GTA IV, Fallout 3, Left 4 Dead и Spore переехали во 2-ю часть) | ~28–33 мин | GTA IV, Fallout 3/NV, Left 4 Dead, Spore, Prototype, AC II, MW2, Batman: AA, флеш-игры, игры ВК, Java-игры, Angry Birds, PvZ, Метро 2033, Lineage/Аллоды, World of Tanks, Mafia II, NFS Hot Pursuit |
 | 4 | «Последний уровень детства» | 2011–2014 | ~28–33 мин | Minecraft, Skyrim, Portal 2, Terraria, Dota 2 и TI, CS:GO, Garry's Mod и TF2, BF3 vs MW3, Far Cry 3, DayZ и Rust, The Last of Us, GTA V, Black Flag, мобильные хиты, Flappy Bird, Warface и Steam, хорроры и летсплееры, финал серии |
 
 ## Как считать хронометраж
