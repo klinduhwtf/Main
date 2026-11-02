@@ -1,0 +1,764 @@
+<title>Гит-квест</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Unbounded:wght@500;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: top status bar (level + XP), left level map drawn as a commit graph, right lesson stage: theory → practice sandbox → quiz */
+:root{
+  --bg:#f3f5f1; --surface:#ffffff; --surface2:#e9eee8; --fg:#18201b; --muted:#5a6860; --line:#d3dad3;
+  --accent:#1d7a52; --accent-fg:#ffffff; --accent-soft:#dcefe5;
+  --gold:#b7791f; --gold-soft:#f8ecd6; --bad:#c2410c; --bad-soft:#fbe5da; --info:#2f5fb3; --info-soft:#e1e9f8;
+  --term-bg:#151b18; --term-fg:#dbe6df; --term-dim:#8fa197; --term-ok:#6fd6a2; --term-err:#ff9a76; --term-warn:#f2c46a;
+  --lane0:#1d7a52; --lane1:#2f5fb3; --lane2:#b7791f; --lane3:#a23d8a;
+  --f-display:"Unbounded","Golos Text",system-ui,sans-serif;
+  --f-body:"Golos Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#121715; --surface:#1a201d; --surface2:#222a26; --fg:#e4ebe6; --muted:#9aa9a0; --line:#2f3934;
+  --accent:#4cc88e; --accent-fg:#0d1511; --accent-soft:#1b3328;
+  --gold:#f0b44c; --gold-soft:#372b17; --bad:#ff8a5c; --bad-soft:#3a2219; --info:#7ea7f0; --info-soft:#1c2740;
+  --term-bg:#0b0f0d; --term-fg:#dbe6df; --term-dim:#7d8f85; --term-ok:#6fd6a2; --term-err:#ff9a76; --term-warn:#f2c46a;
+  --lane0:#4cc88e; --lane1:#7ea7f0; --lane2:#f0b44c; --lane3:#e07bc8; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121715; --surface:#1a201d; --surface2:#222a26; --fg:#e4ebe6; --muted:#9aa9a0; --line:#2f3934;
+  --accent:#4cc88e; --accent-fg:#0d1511; --accent-soft:#1b3328;
+  --gold:#f0b44c; --gold-soft:#372b17; --bad:#ff8a5c; --bad-soft:#3a2219; --info:#7ea7f0; --info-soft:#1c2740;
+  --term-bg:#0b0f0d; --term-fg:#dbe6df; --term-dim:#7d8f85; --term-ok:#6fd6a2; --term-err:#ff9a76; --term-warn:#f2c46a;
+  --lane0:#4cc88e; --lane1:#7ea7f0; --lane2:#f0b44c; --lane3:#e07bc8; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:16px/1.6 var(--f-body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+code,kbd{font:.9em var(--f-mono);background:var(--accent-soft);padding:1px 5px;border-radius:4px}
+
+/* top bar */
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line);margin:0 calc(-1 * max(16px,env(safe-area-inset-left,0px))) 0 calc(-1 * max(16px,env(safe-area-inset-right,0px)));padding:10px max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px))}
+.bar-in{max-width:1240px;margin:0 auto;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.logo{font:800 18px/1 var(--f-display);letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
+.logo svg{width:26px;height:26px}
+.lvl{display:flex;align-items:center;gap:10px;flex:1;min-width:220px}
+.lvl-badge{font:700 13px/1 var(--f-display);background:var(--accent);color:var(--accent-fg);border-radius:999px;padding:7px 11px;white-space:nowrap}
+.lvl-name{font-weight:600;white-space:nowrap}
+.xpbar{flex:1;height:10px;background:var(--surface2);border-radius:999px;overflow:hidden;min-width:80px}
+.xpbar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--gold));width:0;transition:width .6s}
+.xptext{font:600 12px var(--f-mono);color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.badges-btn{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:14px;display:flex;gap:6px;align-items:center}
+.badges-btn b{font-family:var(--f-mono)}
+
+.wrap{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:270px minmax(0,1fr);gap:32px;padding-block:28px 80px}
+
+/* level map */
+.map{position:sticky;top:calc(env(safe-area-inset-top,0px) + 76px);align-self:start}
+.map h2{font:600 11px/1 var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:4px 0 14px}
+.map ol{list-style:none;margin:0;padding:0;position:relative}
+.map ol::before{content:"";position:absolute;left:17px;top:18px;bottom:18px;width:3px;background:var(--line);border-radius:2px}
+.map li{position:relative}
+.map button{display:grid;grid-template-columns:36px 1fr;gap:12px;align-items:center;width:100%;text-align:left;background:none;border:0;padding:6px 6px 6px 0;border-radius:10px}
+.map button:hover .node{transform:scale(1.08)}
+.node{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--surface);border:3px solid var(--line);font:700 13px var(--f-display);color:var(--muted);position:relative;z-index:1;transition:transform .15s}
+.map .done .node{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.map .next .node{border-color:var(--accent);color:var(--accent);animation:pulse 1.8s infinite}
+.map .cur button{background:var(--surface)}
+.map .cur .node{box-shadow:0 0 0 4px var(--accent-soft)}
+.mt{display:block;font-size:14px;font-weight:600;line-height:1.25}
+.ms{display:block;font-size:12px;color:var(--gold);letter-spacing:2px;height:16px}
+.ms .off{color:var(--line)}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 var(--accent-soft)}50%{box-shadow:0 0 0 7px var(--accent-soft)}}
+@media (prefers-reduced-motion:reduce){.map .next .node{animation:none}.xpbar i{transition:none}}
+.reset{margin-top:18px;font-size:13px;color:var(--muted);background:none;border:1px dashed var(--line);border-radius:8px;padding:6px 10px}
+.reset.arm{color:var(--bad);border-color:var(--bad)}
+
+/* stage */
+main{min-width:0}
+.hero{display:flex;gap:20px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;margin-bottom:20px}
+.hero .eyebrow{font:600 12px/1 var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+.hero h1{font:800 clamp(26px,4vw,40px)/1.1 var(--f-display);margin:10px 0 8px;text-wrap:balance;letter-spacing:-.015em}
+.hero p{margin:0;color:var(--muted);max-width:60ch;font-size:17px}
+.reward{display:flex;gap:8px;flex-wrap:wrap}
+.chip{font:600 12px var(--f-mono);border-radius:999px;padding:5px 10px;background:var(--gold-soft);color:var(--gold);white-space:nowrap}
+
+.block{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px;margin-bottom:20px}
+.block>h2{font:700 19px/1.25 var(--f-display);margin:0 0 4px;display:flex;align-items:center;gap:10px}
+.block>h2 .step{font:700 12px var(--f-mono);background:var(--surface2);color:var(--muted);border-radius:6px;padding:3px 7px}
+.block>.sub{color:var(--muted);margin:0 0 16px;font-size:15px}
+.theory{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,300px);gap:24px;align-items:start}
+.theory .txt p{margin:0 0 12px;max-width:62ch}
+.theory .txt ul{margin:0 0 12px;padding-left:20px}
+.theory .txt li{margin:4px 0}
+.art{background:var(--surface2);border-radius:12px;padding:14px}
+.art svg{width:100%;height:auto;display:block}
+.art figcaption{font-size:13px;color:var(--muted);margin-top:8px;text-align:center}
+.tip{background:var(--info-soft);border-radius:10px;padding:10px 14px;margin:6px 0 12px;font-size:15px}
+.tip b{color:var(--info)}
+.warn{background:var(--bad-soft);border-radius:10px;padding:10px 14px;margin:6px 0 12px;font-size:15px}
+.warn b{color:var(--bad)}
+
+/* practice */
+.mission{display:grid;gap:8px;margin:0 0 16px;padding:0;list-style:none}
+.mission li{display:grid;grid-template-columns:26px 1fr auto;gap:10px;align-items:start;padding:10px 12px;border-radius:10px;background:var(--surface2);border:1px solid transparent}
+.mission li.now{border-color:var(--accent);background:var(--accent-soft)}
+.mission li.ok{opacity:.75}
+.mission .ck{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;font-size:14px;font-weight:700;background:var(--surface)}
+.mission li.ok .ck{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.mission li.now .ck{border-color:var(--accent)}
+.hintbtn{font-size:13px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:3px 9px;white-space:nowrap}
+.hintcmds{grid-column:2/-1;display:flex;flex-wrap:wrap;gap:6px}
+.hintcmds button{font:13px var(--f-mono);background:var(--term-bg);color:var(--term-ok);border:0;border-radius:6px;padding:4px 9px}
+
+.sim{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:16px}
+.term{background:var(--term-bg);color:var(--term-fg);border-radius:12px;display:flex;flex-direction:column;min-height:340px;overflow:hidden;font:14px/1.5 var(--f-mono)}
+.term-top{display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid #26302b;color:var(--term-dim);font-size:12px}
+.term-top i{width:10px;height:10px;border-radius:50%;background:#3a4540;display:inline-block}
+.term-top span{margin-left:6px}
+.term-top button{margin-left:auto;background:none;border:1px solid #33403a;color:var(--term-dim);border-radius:6px;font-size:12px;padding:2px 8px}
+.out{flex:1;overflow-y:auto;padding:10px 12px;max-height:340px;white-space:pre-wrap;word-break:break-word}
+.out .cmd{color:var(--term-fg)}
+.out .cmd::before{content:"$ ";color:var(--term-ok)}
+.out .ok{color:var(--term-ok)}.out .err{color:var(--term-err)}.out .warn{color:var(--term-warn)}.out .dim{color:var(--term-dim)}
+.inrow{display:flex;gap:8px;align-items:center;border-top:1px solid #26302b;padding:8px 10px}
+.inrow label{color:var(--term-ok)}
+.inrow input{flex:1;min-width:0;background:transparent;border:0;color:var(--term-fg);font:inherit;outline:none;padding:6px 0}
+.inrow button{background:var(--accent);color:var(--accent-fg);border:0;border-radius:8px;padding:6px 12px;font:600 13px var(--f-body)}
+.visual{display:grid;gap:12px;min-width:0}
+.zones{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;position:relative}
+.zone{border:2px dashed var(--line);border-radius:12px;padding:10px 8px;min-height:120px;background:var(--surface)}
+.zone h3{font:700 12px/1.2 var(--f-body);margin:0 0 2px;display:flex;align-items:center;gap:6px}
+.zone .zs{font-size:11px;color:var(--muted);margin:0 0 8px;line-height:1.3}
+.zone.box{border-style:solid;border-color:var(--gold)}
+.zone.hist{border-style:solid;border-color:var(--accent)}
+.files{display:flex;flex-direction:column;gap:5px}
+.file{font:12px/1.2 var(--f-mono);padding:5px 7px;border-radius:6px;background:var(--surface2);display:flex;gap:5px;align-items:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file.new{background:var(--accent-soft);color:var(--accent)}
+.file.mod{background:var(--gold-soft);color:var(--gold)}
+.file.conf{background:var(--bad-soft);color:var(--bad)}
+.file small{margin-left:auto;font-size:10px;opacity:.8}
+.empty{font-size:12px;color:var(--muted);font-style:italic}
+.flow{display:flex;justify-content:space-around;font:11px var(--f-mono);color:var(--muted);margin-top:-4px}
+.graphbox{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:10px 10px 4px}
+.graphbox h3{font:700 12px var(--f-body);margin:0 0 4px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.graphbox h3 span{font-weight:400;color:var(--muted)}
+.graph{overflow-x:auto}
+.graph svg{display:block}
+.cloud{border:1px solid var(--line);border-radius:12px;background:var(--info-soft);padding:8px 12px;font-size:13px;display:flex;gap:8px;align-items:center}
+
+/* quiz */
+.q{border-top:1px solid var(--line);padding:16px 0}
+.q:first-of-type{border-top:0;padding-top:4px}
+.q h3{font:600 17px/1.35 var(--f-body);margin:0 0 10px;text-wrap:balance}
+.opts{display:grid;gap:8px}
+.opt{text-align:left;border:2px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 14px;font-size:15px;transition:border-color .15s}
+.opt:hover{border-color:var(--accent)}
+.opt.right{border-color:var(--accent);background:var(--accent-soft)}
+.opt.wrong{border-color:var(--bad);background:var(--bad-soft)}
+.opt:disabled{cursor:default}
+.why{margin-top:10px;font-size:14px;padding:8px 12px;border-radius:8px}
+.why.r{background:var(--accent-soft)}.why.w{background:var(--bad-soft)}
+
+.finish{text-align:center;padding:28px 22px;border:2px solid var(--accent);background:linear-gradient(180deg,var(--accent-soft),var(--surface))}
+.finish h2{justify-content:center;font-size:24px}
+.stars{font-size:40px;letter-spacing:8px;color:var(--gold);margin:6px 0}
+.stars .off{color:var(--line)}
+.finish ul{list-style:none;padding:0;margin:8px 0 16px;color:var(--muted);font-size:14px}
+.big{background:var(--accent);color:var(--accent-fg);border:0;border-radius:12px;padding:12px 22px;font:700 16px var(--f-display)}
+.big:disabled{opacity:.45;cursor:not-allowed}
+.locked{color:var(--muted);font-size:14px;text-align:center}
+
+/* badges dialog & toasts */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:20;display:grid;place-items:center;padding:16px}
+.dlg{background:var(--surface);border-radius:16px;max-width:560px;width:100%;padding:22px;max-height:85vh;overflow:auto}
+.dlg h2{font:700 20px var(--f-display);margin:0 0 14px;display:flex;justify-content:space-between}
+.dlg h2 button{background:none;border:0;font-size:22px;line-height:1}
+.bgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.bdg{border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center}
+.bdg .ic{width:48px;height:48px;margin:0 auto 6px;border-radius:50%;display:grid;place-items:center;background:var(--gold-soft);color:var(--gold);font:800 20px var(--f-display)}
+.bdg.off{opacity:.45;filter:grayscale(1)}
+.bdg b{display:block;font-size:14px}
+.bdg span{font-size:12px;color:var(--muted)}
+.toasts{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:30;display:grid;gap:8px;justify-items:end}
+.toast{background:var(--fg);color:var(--bg);border-radius:12px;padding:10px 14px;font-weight:600;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,.2);animation:tin .3s ease-out}
+.toast.gold{background:var(--gold);color:#1a1205}
+@keyframes tin{from{transform:translateY(12px);opacity:0}to{transform:none;opacity:1}}
+canvas#fx{position:fixed;inset:0;pointer-events:none;z-index:25;width:100%;height:100%}
+
+@media (max-width:1020px){.sim{grid-template-columns:1fr}.theory{grid-template-columns:1fr}.art{max-width:420px}}
+@media (max-width:820px){
+  .wrap{grid-template-columns:1fr;gap:16px;padding-block:16px 60px}
+  .map{position:static}
+  .map ol{display:flex;gap:6px;overflow-x:auto;padding:4px 2px 8px}
+  .map ol::before{left:18px;right:18px;top:22px;bottom:auto;width:auto;height:3px}
+  .map button{grid-template-columns:1fr;justify-items:center;width:76px;padding:4px 0;text-align:center}
+  .mt{font-size:11px;font-weight:500}
+  .reset{display:none}
+  .block{padding:16px}
+  .zones{grid-template-columns:1fr 1fr 1fr}
+  .zone{padding:8px 6px}
+}
+</style>
+
+<div class="bar"><div class="bar-in">
+  <div class="logo"><svg viewBox="0 0 26 26" aria-hidden="true"><circle cx="6" cy="20" r="3.5" fill="var(--lane0)"/><circle cx="6" cy="6" r="3.5" fill="var(--lane0)"/><circle cx="20" cy="11" r="3.5" fill="var(--lane1)"/><path d="M6 9.5v7M6 14c0-3 4-3 10.5-3" stroke="var(--fg)" stroke-width="2" fill="none"/></svg>Гит-квест</div>
+  <div class="lvl"><span class="lvl-badge" id="lvlNum">Ур. 1</span><span class="lvl-name" id="lvlName">Чайник</span><div class="xpbar" aria-hidden="true"><i id="xpFill"></i></div><span class="xptext" id="xpText">0 XP</span></div>
+  <button class="badges-btn" id="badgesBtn" type="button">Значки <b id="bCount">0/8</b></button>
+</div></div>
+
+<div class="wrap">
+  <nav class="map" aria-label="Уровни курса">
+    <h2>Карта уровней</h2>
+    <ol id="map"></ol>
+    <button class="reset" id="reset" type="button">Начать заново</button>
+  </nav>
+  <main id="stage"></main>
+</div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<canvas id="fx"></canvas>
+
+<script>
+(function(){
+"use strict";
+/* ---------- tiny helpers ---------- */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const hex=()=>Math.random().toString(16).slice(2,9).padEnd(7,"0");
+
+/* ---------- progress store (per-viewer) ---------- */
+const KEY="git-kvest-v1";
+let store={xp:0,lessons:{},badges:[],cur:0};
+try{const s=localStorage.getItem(KEY);if(s)store=Object.assign(store,JSON.parse(s))}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(store))}catch(e){}}
+function ls(id){return store.lessons[id]||(store.lessons[id]={done:false,stars:0,awarded:[],quiz:{}})}
+
+/* ---------- fake git engine ---------- */
+class Repo{
+  constructor(){Object.assign(this,{inited:false,files:{},index:{},commits:{},seq:0,branches:{},head:"main",remote:null,remoteBranches:{},merging:null,conflicts:[],lanes:{main:0},nextLane:1,edits:0,last:"",events:[],onPush:null,pushed:0});}
+  tip(b){return this.branches[b===undefined?this.head:b]||null}
+  tree(id){return id?this.commits[id].tree:{}}
+  H(){return this.tree(this.tip())}
+  anc(id){const s=new Set(),st=[id];while(st.length){const c=st.pop();if(!c||s.has(c))continue;s.add(c);st.push(...this.commits[c].parents)}return s}
+  isAnc(a,b){if(!a)return true;if(!b)return false;return this.anc(b).has(a)}
+  count(){return Object.values(this.commits).filter(c=>c.author==="Вы").length}
+  mk(msg,parents,tree,author,lane){const id=hex();this.commits[id]={id,msg,parents,tree:{...tree},author:author||"Вы",seq:++this.seq,lane:lane===undefined?(this.lanes[this.head]||0):lane};return id}
+  dirty(){const H=this.H(),I=this.index,W=this.files;for(const f in I){if(W[f]!==I[f])return true;if(I[f]!==H[f])return true}for(const f in H){if(!(f in I))return true}return false}
+  emit(e){this.events.push(e)}
+  run(line,quiet){
+    const out=[];const p=(t,c)=>out.push({t,c:c||""});
+    line=line.trim();if(!line)return out;
+    const a=tok(line);this.last=line.replace(/\s+/g," ");
+    const cmd=a[0];
+    if(cmd==="help"||cmd==="помощь"){p("Команды этой песочницы:\n  ls, cat файл, touch файл (создать), edit файл (поменять)\n  git init | status | add | commit -m \"…\" | log | diff\n  git restore | branch | switch | merge | revert\n  git remote add origin адрес | push | pull | fetch\n  clear — очистить экран","dim");return out}
+    if(cmd==="clear"){return [{t:"",c:"clear"}]}
+    if(cmd==="ls"){const f=Object.keys(this.files);p(f.length?f.join("   "):"(папка пуста)");return out}
+    if(cmd==="pwd"){p("/home/вы/сценарии");return out}
+    if(cmd==="cat"){const f=a[1];if(!f||!(f in this.files)){p("cat: нет такого файла: "+(f||""),"err")}else p(this.files[f]);return out}
+    if(cmd==="touch"){const f=a[1];if(!f){p("Укажите имя файла: touch идеи.txt","err");return out}if(f in this.files){p("Файл "+f+" уже есть","dim")}else{this.files[f]="Новый файл "+f;p("Создан файл "+f,"ok")}return out}
+    if(cmd==="edit"||cmd==="nano"||cmd==="code"){const f=a[1];if(!f){p("Какой файл поменять? edit сценарий.txt","err");return out}
+      if(this.conflicts.includes(f)){this.files[f]="Объединённая версия (выбрали лучшее из обеих)";this.conflicts=this.conflicts.filter(x=>x!==f);p("Вы открыли "+f+", оставили нужный текст и стёрли маркеры <<<<<<< ======= >>>>>>>.\nТеперь: git add "+f+" и git commit","ok");return out}
+      const was=f in this.files;this.files[f]="Текст, версия "+(++this.edits);p((was?"Поменяли ":"Создали ")+f+" (в редакторе)","ok");return out}
+    if(cmd!=="git"){p("Команда «"+cmd+"» не найдена. Наберите help, чтобы увидеть список.","err");return out}
+    const sub=a[1];
+    if(!sub){p("Напишите, что сделать: например git status","err");return out}
+    if(sub==="init"){if(this.inited){p("Репозиторий уже есть, повторять не нужно","dim")}else{this.inited=true;p("Готово! Пустой репозиторий создан в /home/вы/сценарии/.git\nТеперь Git следит за этой папкой.","ok");this.emit("init")}return out}
+    if(sub==="clone"){p("В песочнице клонировать неоткуда. В жизни: git clone https://github.com/имя/репо.git","dim");return out}
+    if(sub==="--version"){p("git version 2.47.0");return out}
+    if(!this.inited){p("fatal: здесь нет репозитория.\nСначала включите Git: git init","err");return out}
+    const H=this.H(),I=this.index,W=this.files;
+    switch(sub){
+    case "status":{
+      p("Вы на ветке "+this.head,"dim");
+      if(this.merging)p("Идёт слияние."+(this.conflicts.length?" Есть конфликт — поправьте файлы и сделайте git add.":" Конфликты решены — осталось git commit."),"warn");
+      const staged=[],mod=[],un=[];
+      for(const f of new Set([...Object.keys(I),...Object.keys(H)]))if(I[f]!==H[f])staged.push((f in H?"изменён: ":"новый: ")+f);
+      for(const f in W){if(this.conflicts.includes(f))mod.push("конфликт: "+f);else if(!(f in I))un.push(f);else if(W[f]!==I[f])mod.push("изменён: "+f)}
+      if(staged.length)p("В коробке (уйдёт в следующий коммит):\n  "+staged.join("\n  "),"ok");
+      if(mod.length)p("Изменено, но не в коробке (git add, чтобы положить):\n  "+mod.join("\n  "),"err");
+      if(un.length)p("Новые файлы, Git за ними пока не следит:\n  "+un.join("\n  "),"err");
+      if(!staged.length&&!mod.length&&!un.length)p("Всё чисто: сохранять нечего.","ok");
+      return out}
+    case "add":{
+      const t=a.slice(2);if(!t.length){p("Что положить в коробку? git add файл или git add .","err");return out}
+      let list=[];if(t.includes(".")||t.includes("-A")||t.includes("--all"))list=Object.keys(W);else list=t;
+      let n=0;
+      for(const f of list){
+        if(!(f in W)){p("Нет такого файла: "+f,"err");continue}
+        if(this.conflicts.includes(f)){p("В "+f+" ещё конфликт. Сначала поправьте файл: edit "+f,"err");continue}
+        if(I[f]!==W[f]){I[f]=W[f];n++}
+      }
+      if(n)p("Положили в коробку: "+n+" "+pl(n,"файл","файла","файлов"),"ok");else if(!out.length)p("Нового для коробки нет","dim");
+      return out}
+    case "commit":{
+      const mi=a.indexOf("-m");if(mi<0||!a[mi+1]){p("Нужна подпись: git commit -m \"что сделал\"\n(без -m настоящий Git откроет редактор)","err");return out}
+      if(this.conflicts.length){p("Нельзя сохранить: остались конфликты в "+this.conflicts.join(", "),"err");return out}
+      const same=JSON.stringify(sortObj(I))===JSON.stringify(sortObj(H));
+      if(same&&!this.merging){p("Сохранять нечего: коробка пуста.\nСначала git add файл","err");return out}
+      const parents=this.tip()?[this.tip()]:[];if(this.merging)parents.push(this.merging);
+      const id=this.mk(a[mi+1],parents,I);this.branches[this.head]=id;
+      const wasMerge=!!this.merging;this.merging=null;
+      p("["+this.head+" "+id+"] "+a[mi+1],"ok");p("Сохранение готово!","ok");
+      this.emit("commit");if(wasMerge)this.emit("merge-resolved");
+      return out}
+    case "log":{
+      const tip=this.tip();if(!tip){p("Сохранений пока нет","dim");return out}
+      const ids=[...this.anc(tip)].map(i=>this.commits[i]).sort((x,y)=>y.seq-x.seq);
+      const one=a.includes("--oneline");
+      for(const c of ids){
+        const tags=[];for(const b in this.branches)if(this.branches[b]===c.id)tags.push(b===this.head?"HEAD -> "+b:b);
+        for(const b in this.remoteBranches)if(this.remoteBranches[b]===c.id)tags.push("origin/"+b);
+        const tg=tags.length?" ("+tags.join(", ")+")":"";
+        if(one)out.push({t:c.id+tg+" "+c.msg,c:""});
+        else out.push({t:"commit "+c.id+tg+"\nАвтор: "+c.author+"\n    "+c.msg+"\n",c:""});
+      }
+      return out}
+    case "diff":{
+      const st=a.includes("--staged")||a.includes("--cached");let any=false;
+      const A=st?H:I,B=st?I:W;
+      for(const f of new Set([...Object.keys(A),...Object.keys(B)])){
+        if(!st&&!(f in I))continue;
+        if(A[f]!==B[f]){any=true;p("--- "+f,"dim");if(A[f]!==undefined)p("- "+A[f],"err");if(B[f]!==undefined)p("+ "+B[f],"ok")}
+      }
+      if(!any)p(st?"В коробке ничего не поменялось":"Изменений вне коробки нет","dim");
+      return out}
+    case "restore":{
+      const stg=a.includes("--staged");const t=a.slice(2).filter(x=>x!=="--staged");
+      if(!t.length){p("Какой файл вернуть? git restore файл","err");return out}
+      const list=t.includes(".")?Object.keys(stg?I:W):t;
+      for(const f of list){
+        if(stg){if(H[f]===undefined)delete I[f];else I[f]=H[f];p("Вынули из коробки: "+f+" (сами правки остались)","ok");this.emit("unstage")}
+        else{if(!(f in I)){p(f+": файл новый, Git нечего возвращать","err");continue}W[f]=I[f];p("Вернули "+f+" к сохранённой версии","ok");this.emit("restore")}
+      }
+      return out}
+    case "branch":{
+      const n=a[2];
+      if(!n){for(const b of Object.keys(this.branches))p((b===this.head?"* ":"  ")+b,b===this.head?"ok":"");if(!Object.keys(this.branches).length)p("Веток пока нет: сначала сделайте первый коммит","dim");return out}
+      if(n==="-d"||n==="-D"){const b=a[3];if(!this.branches[b]){p("Нет ветки "+b,"err")}else if(b===this.head){p("Нельзя удалить ветку, на которой вы стоите","err")}else{delete this.branches[b];p("Ветка "+b+" удалена","ok")}return out}
+      return this.newBranch(n,p,out)}
+    case "switch": case "checkout":{
+      let n=a[2],create=false;
+      if(n==="-c"||n==="-b"){create=true;n=a[3]}
+      if(n==="--detach"){p("В песочнице путешествие в прошлое не нужно. Смотрите историю: git log","dim");return out}
+      if(!n){p("Куда перейти? git switch имя_ветки","err");return out}
+      if(create){this.newBranch(n,p,out);if(!this.branches[n])return out}
+      else if(!this.branches[n]){p("Нет ветки "+n+". Создать и перейти: git switch -c "+n,"err");return out}
+      if(n===this.head){if(!create)p("Вы уже на ветке "+n,"dim");return out}
+      if(this.dirty()&&!create){p("Не могу переключиться: есть несохранённые правки.\nСначала git add и git commit.","err");return out}
+      if(!create)this.checkoutTree(this.tree(this.branches[n]));this.head=n;
+      p("Перешли на ветку "+n,"ok");this.emit("switch");return out}
+    case "merge":{
+      if(a[2]==="--abort"){if(!this.merging){p("Слияния сейчас нет","dim");return out}this.merging=null;this.conflicts=[];this.checkoutTree(H,true);p("Слияние отменено, всё как было","ok");return out}
+      const b=a[2];if(!b||!this.branches[b]){p("Нет ветки "+(b||"")+". Посмотреть ветки: git branch","err");return out}
+      if(b===this.head){p("Нельзя влить ветку саму в себя","err");return out}
+      if(this.dirty()){p("Сначала сохраните правки (add + commit)","err");return out}
+      const A=this.tip(),B=this.branches[b];
+      if(this.isAnc(B,A)){p("Уже всё влито, нечего добавлять","dim");return out}
+      if(this.isAnc(A,B)){this.branches[this.head]=B;this.checkoutTree(this.tree(B));p("Влили "+b+" в "+this.head+" (просто перемотали вперёд)","ok");this.emit("merge");return out}
+      const base=this.mergeBase(A,B),o=this.tree(base),x=this.tree(A),y=this.tree(B);
+      const m={},conf=[];
+      for(const f of new Set([...Object.keys(o),...Object.keys(x),...Object.keys(y)])){
+        if(x[f]===y[f]){if(x[f]!==undefined)m[f]=x[f]}
+        else if(x[f]===o[f]){if(y[f]!==undefined)m[f]=y[f]}
+        else if(y[f]===o[f]){if(x[f]!==undefined)m[f]=x[f]}
+        else conf.push(f);
+      }
+      if(!conf.length){const id=this.mk("Слияние ветки "+b,[A,B],m);this.branches[this.head]=id;this.checkoutTree(m);p("Влили "+b+" в "+this.head+". Git сам создал коммит слияния.","ok");this.emit("merge");return out}
+      this.index={...m};for(const f in m)this.files[f]=m[f];
+      for(const f of conf){if(x[f]!==undefined)this.index[f]=x[f];this.files[f]="<<<<<<< HEAD (ваша ветка "+this.head+")\n"+(x[f]||"")+"\n=======\n"+(y[f]||"")+"\n>>>>>>> "+b;}
+      this.merging=B;this.conflicts=conf;
+      p("КОНФЛИКТ в "+conf.join(", ")+"\nОдна строка поменялась по-разному в двух ветках. Git просит выбрать.\nПосмотреть: cat "+conf[0]+"   Поправить: edit "+conf[0],"warn");this.emit("conflict");return out}
+    case "revert":{
+      const id=a[2];const c=this.commits[id];if(!c){p("Нет коммита "+(id||"")+". Номер смотрите в git log --oneline","err");return out}
+      const pt=this.tree(c.parents[0]),nt={...H};
+      for(const f of new Set([...Object.keys(pt),...Object.keys(c.tree)]))if(pt[f]!==c.tree[f]){if(pt[f]===undefined)delete nt[f];else nt[f]=pt[f]}
+      const nid=this.mk("Отмена: "+c.msg,[this.tip()],nt);this.branches[this.head]=nid;this.checkoutTree(nt);
+      p("Создан коммит "+nid+", который отменяет «"+c.msg+"». История цела.","ok");this.emit("revert");return out}
+    case "reset":{
+      if(a.includes("--hard")){this.checkoutTree(H,true);p("Осторожно! reset --hard стёр все несохранённые правки. В жизни их уже не вернуть.","warn")}
+      else p("В песочнице reset не нужен. Попробуйте git restore или git revert","dim");return out}
+    case "remote":{
+      if(a[2]==="add"){if(!a[4]){p("Формат: git remote add origin https://github.com/вы/репо.git","err");return out}this.remote=a[4];p("Привязали облако origin → "+a[4],"ok");this.emit("remote");return out}
+      if(this.remote)p("origin  "+this.remote);else p("Облако не привязано","dim");return out}
+    case "push":{
+      if(!this.remote){p("Некуда отправлять. Сначала привяжите облако:\ngit remote add origin https://github.com/вы/репо.git","err");return out}
+      const b=this.head,t=this.tip();if(!t){p("Отправлять нечего: нет коммитов","err");return out}
+      const rt=this.remoteBranches[b];
+      if(rt&&!this.isAnc(rt,t)){p("Отказ! В облаке есть чужие коммиты, которых нет у вас.\nСначала заберите их: git pull","err");return out}
+      if(rt===t){p("В облаке и так всё свежее","dim");return out}
+      this.remoteBranches[b]=t;p("Отправили ветку "+b+" на GitHub ("+this.remote+")","ok");this.pushed++;this.emit("push");
+      if(this.onPush){const msg=this.onPush(this);if(msg)p(msg,"warn")}
+      return out}
+    case "fetch":{
+      if(!this.remote){p("Облако не привязано","err");return out}
+      const rt=this.remoteBranches[this.head];
+      if(rt&&!this.isAnc(rt,this.tip()))p("В облаке есть новое! Забрать к себе: git pull","warn");else p("В облаке ничего нового","dim");return out}
+    case "pull":{
+      if(!this.remote){p("Облако не привязано","err");return out}
+      const rt=this.remoteBranches[this.head],t=this.tip();
+      if(!rt||this.isAnc(rt,t)){p("Всё свежее, забирать нечего","dim");return out}
+      if(this.dirty()){p("Сначала сохраните свои правки (add + commit)","err");return out}
+      if(this.isAnc(t,rt)){this.branches[this.head]=rt;this.checkoutTree(this.tree(rt));p("Забрали из облака новые коммиты. Папка обновлена.","ok");this.emit("pull");return out}
+      this.branches["origin/"+this.head]=rt;const out2=this.run("git merge origin/"+this.head,true);delete this.branches["origin/"+this.head];return out.concat(out2)}
+    default:p("Git не знает команду «"+sub+"». Наберите help","err");return out}
+  }
+  newBranch(n,p,out){
+    if(!this.tip()){p("Сначала сделайте хотя бы один коммит","err");return out}
+    if(this.branches[n]){p("Ветка "+n+" уже есть","err");return out}
+    this.branches[n]=this.tip();if(!(n in this.lanes))this.lanes[n]=this.nextLane++;
+    p("Создана ветка "+n,"ok");this.emit("branch");return out}
+  mergeBase(a,b){const A=this.anc(a);let best=null;for(const id of this.anc(b))if(A.has(id)&&(!best||this.commits[id].seq>this.commits[best].seq))best=id;return best}
+  checkoutTree(t,hard){
+    const H=this.H();
+    for(const f in this.files){const tracked=(f in H)||(f in this.index);if(tracked||hard)delete this.files[f]}
+    for(const f in t)this.files[f]=t[f];
+    this.index={...t};
+  }
+  quick(list){for(const c of list)this.run(c,true);this.events=[];this.last=""}
+}
+function tok(s){const r=[];const re=/"([^"]*)"|'([^']*)'|«([^»]*)»|[“„]([^”“]*)[”“]|(\S+)/g;let m;while((m=re.exec(s)))r.push([m[1],m[2],m[3],m[4],m[5]].find(x=>x!==undefined));return r}
+function sortObj(o){const r={};Object.keys(o).sort().forEach(k=>r[k]=o[k]);return r}
+function pl(n,a,b,c){n=Math.abs(n)%100;const m=n%10;if(n>10&&n<20)return c;if(m>1&&m<5)return b;if(m===1)return a;return c}
+
+/* ---------- illustrations ---------- */
+const ART={
+saves:`<svg viewBox="0 0 300 170" role="img" aria-label="Три сохранения на линии времени"><line x1="30" y1="70" x2="270" y2="70" stroke="var(--line)" stroke-width="4" stroke-linecap="round"/>
+${[0,1,2].map(i=>`<g><circle cx="${60+i*90}" cy="70" r="16" fill="var(--lane0)"/><text x="${60+i*90}" y="75" text-anchor="middle" font-family="var(--f-display)" font-size="13" font-weight="700" fill="var(--accent-fg)">${i+1}</text><rect x="${22+i*90}" y="100" width="76" height="46" rx="8" fill="var(--surface)" stroke="var(--line)"/><text x="${60+i*90}" y="119" text-anchor="middle" font-size="11" fill="var(--fg)" font-family="var(--f-body)">${["Начало","Глава 1","Глава 2"][i]}</text><text x="${60+i*90}" y="135" text-anchor="middle" font-size="10" fill="var(--muted)" font-family="var(--f-mono)">${["a1f3c9e","7b2e810","c45d0aa"][i]}</text></g>`).join("")}
+<path d="M240 40 C 200 10, 110 10, 70 44" fill="none" stroke="var(--gold)" stroke-width="2.5" stroke-dasharray="5 4" marker-end="url(#ah)"/><defs><marker id="ah" markerWidth="8" markerHeight="8" refX="5" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8z" fill="var(--gold)"/></marker></defs>
+<text x="155" y="20" text-anchor="middle" font-size="12" fill="var(--gold)" font-family="var(--f-body)" font-weight="600">Испортил? Вернись к любому!</text></svg>`,
+folder:`<svg viewBox="0 0 300 170" role="img" aria-label="Папка с глазом Git"><path d="M40 50 h70 l14 16 h136 v84 h-220z" fill="var(--gold-soft)" stroke="var(--gold)" stroke-width="2.5" stroke-linejoin="round"/>
+<rect x="70" y="80" width="46" height="56" rx="5" fill="var(--surface)" stroke="var(--line)"/><rect x="128" y="80" width="46" height="56" rx="5" fill="var(--surface)" stroke="var(--line)"/><path d="M78 96h30M78 106h24M78 116h28M136 96h30M136 106h22" stroke="var(--muted)" stroke-width="2"/>
+<g transform="translate(222 104)"><ellipse rx="26" ry="16" fill="var(--surface)" stroke="var(--accent)" stroke-width="2.5"/><circle r="8" fill="var(--accent)"/><circle r="3" fill="var(--surface)"/></g>
+<text x="222" y="146" text-anchor="middle" font-family="var(--f-mono)" font-size="11" fill="var(--accent)">.git</text><text x="150" y="30" text-anchor="middle" font-size="13" fill="var(--fg)" font-weight="600" font-family="var(--f-body)">git init — и Git присматривает за папкой</text></svg>`,
+zones:`<svg viewBox="0 0 300 170" role="img" aria-label="Папка, коробка, история"><defs><marker id="az" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8z" fill="var(--muted)"/></marker></defs>
+<rect x="8" y="40" width="80" height="90" rx="10" fill="var(--surface)" stroke="var(--line)" stroke-width="2" stroke-dasharray="5 4"/><text x="48" y="62" text-anchor="middle" font-size="11" font-weight="700" fill="var(--fg)" font-family="var(--f-body)">Папка</text><rect x="22" y="74" width="52" height="16" rx="4" fill="var(--gold-soft)"/><rect x="22" y="96" width="52" height="16" rx="4" fill="var(--accent-soft)"/>
+<path d="M94 85 h22" stroke="var(--muted)" stroke-width="2" marker-end="url(#az)"/><text x="105" y="76" text-anchor="middle" font-size="9" fill="var(--muted)" font-family="var(--f-mono)">add</text>
+<g transform="translate(122 52)"><path d="M0 22 L28 8 L56 22 L56 66 L0 66z" fill="var(--gold-soft)" stroke="var(--gold)" stroke-width="2.5" stroke-linejoin="round"/><path d="M0 22 L28 36 L56 22 M28 36 v30" stroke="var(--gold)" stroke-width="2" fill="none"/></g><text x="150" y="140" text-anchor="middle" font-size="11" font-weight="700" fill="var(--fg)" font-family="var(--f-body)">Коробка</text>
+<path d="M184 85 h22" stroke="var(--muted)" stroke-width="2" marker-end="url(#az)"/><text x="195" y="76" text-anchor="middle" font-size="9" fill="var(--muted)" font-family="var(--f-mono)">commit</text>
+<rect x="212" y="40" width="80" height="90" rx="10" fill="var(--surface)" stroke="var(--accent)" stroke-width="2"/><text x="252" y="62" text-anchor="middle" font-size="11" font-weight="700" fill="var(--fg)" font-family="var(--f-body)">История</text>
+<line x1="252" y1="76" x2="252" y2="118" stroke="var(--accent)" stroke-width="3"/><circle cx="252" cy="78" r="6" fill="var(--accent)"/><circle cx="252" cy="97" r="6" fill="var(--accent)"/><circle cx="252" cy="116" r="6" fill="var(--accent)"/></svg>`,
+history:`<svg viewBox="0 0 300 170" role="img" aria-label="Список коммитов"><rect x="20" y="20" width="260" height="130" rx="10" fill="var(--term-bg)"/><text x="36" y="46" font-family="var(--f-mono)" font-size="12" fill="var(--term-ok)">$ git log --oneline</text>
+${[["c45d0aa","Глава 2"],["7b2e810","Глава 1"],["a1f3c9e","Начало"]].map((r,i)=>`<text x="36" y="${72+i*22}" font-family="var(--f-mono)" font-size="12"><tspan fill="var(--term-warn)">${r[0]}</tspan><tspan fill="var(--term-fg)"> ${r[1]}</tspan></text>`).join("")}
+<text x="36" y="140" font-family="var(--f-body)" font-size="11" fill="var(--term-dim)">↑ свежие сверху · жёлтое — номер (хеш)</text></svg>`,
+undo:`<svg viewBox="0 0 300 170" role="img" aria-label="Кнопки отмены"><g font-family="var(--f-mono)" font-size="12">
+<rect x="20" y="22" width="260" height="36" rx="8" fill="var(--accent-soft)"/><text x="34" y="45" fill="var(--accent)">git restore файл</text><text x="270" y="45" text-anchor="end" fill="var(--muted)" font-family="var(--f-body)" font-size="11">вернуть файл</text>
+<rect x="20" y="66" width="260" height="36" rx="8" fill="var(--gold-soft)"/><text x="34" y="89" fill="var(--gold)">git restore --staged</text><text x="270" y="89" text-anchor="end" fill="var(--muted)" font-family="var(--f-body)" font-size="11">вынуть из коробки</text>
+<rect x="20" y="110" width="260" height="36" rx="8" fill="var(--info-soft)"/><text x="34" y="133" fill="var(--info)">git revert хеш</text><text x="270" y="133" text-anchor="end" fill="var(--muted)" font-family="var(--f-body)" font-size="11">отменить коммит</text></g></svg>`,
+branch:`<svg viewBox="0 0 300 170" role="img" aria-label="Ветка отходит от main"><path d="M30 110 H270" stroke="var(--lane0)" stroke-width="4"/><path d="M110 110 C 130 110, 130 55, 160 55 H230" stroke="var(--lane1)" stroke-width="4" fill="none"/>
+${[30,70,110,200,270].map(x=>`<circle cx="${x}" cy="110" r="9" fill="var(--lane0)"/>`).join("")}${[160,200,230].map(x=>`<circle cx="${x}" cy="55" r="9" fill="var(--lane1)"/>`).join("")}
+<text x="30" y="140" font-family="var(--f-mono)" font-size="12" fill="var(--lane0)">main — чистовик</text><text x="160" y="32" font-family="var(--f-mono)" font-size="12" fill="var(--lane1)">glava2 — черновик</text></svg>`,
+merge:`<svg viewBox="0 0 300 170" role="img" aria-label="Две ветки сливаются"><path d="M30 120 H260" stroke="var(--lane0)" stroke-width="4"/><path d="M80 120 C100 120,100 60,130 60 H180 C210 60,210 120,230 120" stroke="var(--lane1)" stroke-width="4" fill="none"/>
+${[30,80,150,260].map(x=>`<circle cx="${x}" cy="120" r="9" fill="var(--lane0)"/>`).join("")}${[130,180].map(x=>`<circle cx="${x}" cy="60" r="9" fill="var(--lane1)"/>`).join("")}
+<circle cx="230" cy="120" r="13" fill="var(--surface)" stroke="var(--gold)" stroke-width="4"/><text x="230" y="150" text-anchor="middle" font-size="11" font-family="var(--f-body)" fill="var(--gold)" font-weight="600">слияние</text>
+<g transform="translate(150 22)"><rect x="-58" y="-12" width="116" height="24" rx="12" fill="var(--bad-soft)"/><text y="4" text-anchor="middle" font-size="11" fill="var(--bad)" font-family="var(--f-body)" font-weight="600">одна строка? конфликт</text></g></svg>`,
+cloud:`<svg viewBox="0 0 300 170" role="img" aria-label="Компьютер и облако GitHub"><path d="M196 60 a24 24 0 0 1 46 -6 a20 20 0 0 1 22 30 h-80 a18 18 0 0 1 12 -24z" fill="var(--info-soft)" stroke="var(--info)" stroke-width="2.5"/><text x="226" y="104" text-anchor="middle" font-size="12" font-weight="700" fill="var(--info)" font-family="var(--f-body)">GitHub</text>
+<rect x="30" y="66" width="80" height="52" rx="6" fill="var(--surface)" stroke="var(--fg)" stroke-width="2.5"/><path d="M20 126 h100" stroke="var(--fg)" stroke-width="4" stroke-linecap="round"/><text x="70" y="148" text-anchor="middle" font-size="12" font-weight="700" fill="var(--fg)" font-family="var(--f-body)">Ваш компьютер</text>
+<defs><marker id="ac" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8z" fill="var(--accent)"/></marker><marker id="ac2" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8z" fill="var(--gold)"/></marker></defs>
+<path d="M118 76 C150 56,165 56,182 64" stroke="var(--accent)" stroke-width="2.5" fill="none" marker-end="url(#ac)"/><text x="150" y="50" text-anchor="middle" font-size="12" font-family="var(--f-mono)" fill="var(--accent)">push ↑</text>
+<path d="M190 96 C165 112,150 112,120 104" stroke="var(--gold)" stroke-width="2.5" fill="none" marker-end="url(#ac2)"/><text x="155" y="128" text-anchor="middle" font-size="12" font-family="var(--f-mono)" fill="var(--gold)">pull ↓</text></svg>`,
+trophy:`<svg viewBox="0 0 300 170" role="img" aria-label="Кубок"><path d="M110 30 h80 v40 a40 40 0 0 1 -80 0z" fill="var(--gold-soft)" stroke="var(--gold)" stroke-width="3"/><path d="M110 42 h-20 a18 18 0 0 0 22 26 M190 42 h20 a18 18 0 0 1 -22 26" fill="none" stroke="var(--gold)" stroke-width="3"/><path d="M150 110 v18 M126 140 h48" stroke="var(--gold)" stroke-width="5" stroke-linecap="round"/><text x="150" y="70" text-anchor="middle" font-family="var(--f-display)" font-weight="800" font-size="20" fill="var(--gold)">git</text></svg>`
+};
+
+/* ---------- lessons ---------- */
+const FILE="сценарий.txt";
+const L=[
+{id:"what",title:"Что такое Git",short:"Сохранялки для файлов",art:"saves",cap:"Каждый коммит — как точка сохранения в игре",
+ theory:`<p>Знакомо? <code>сценарий_новый_ФИНАЛ_точно_последний.docx</code>. Git избавляет от этой каши.</p>
+ <p><b>Git — это сохранялки для папки с файлами.</b> Как в игре: дошли до важного места — сохранились. Испортили — загрузились с любого сохранения.</p>
+ <p>Файл остаётся <b>один</b>, а все прошлые версии Git прячет у себя внутри.</p>
+ <div class="tip"><b>Git и GitHub — не одно и то же.</b> Git — программа у вас на компьютере, работает без интернета. GitHub — сайт, облачный диск для Git-проектов.</div>`,
+ quiz:[{q:"Что такое коммит?",o:["Сохранение файлов с подписью, что поменялось","Удаление старых файлов","Отправка файла другу","Папка на рабочем столе"],a:0,w:"Коммит — точка сохранения. К нему всегда можно вернуться."},
+  {q:"Git и GitHub — это…",o:["Одно и то же","Git — программа у вас, GitHub — сайт-хранилище","Git — сайт, GitHub — программа"],a:1,w:"Git живёт на компьютере. GitHub хранит копию проекта в облаке."},
+  {q:"Можно ли пользоваться Git без интернета?",o:["Да, Git работает на компьютере","Нет, только онлайн"],a:0,w:"Интернет нужен, только чтобы отправить или забрать изменения с GitHub."}]},
+{id:"init",title:"Репозиторий",short:"git init и git status",art:"folder",cap:"Скрытая папка .git хранит всю историю",
+ theory:`<p><b>Репозиторий</b> (коротко «репо») — обычная папка, за которой присматривает Git.</p>
+ <p>Чтобы Git начал присматривать, в папке один раз пишут <code>git init</code>. Внутри появится скрытая папка <code>.git</code> — там вся история. Её не трогаем.</p>
+ <p>Самая полезная команда на свете — <code>git status</code>. Она отвечает на вопрос <b>«что сейчас происходит?»</b></p>
+ <div class="tip"><b>Как пользоваться песочницей.</b> Ниже настоящий терминал-тренажёр. Пишите команды и жмите Enter. Застряли — жмите «Подсказка».</div>`,
+ setup:r=>{r.files[FILE]="Сюжет начинается в Лос-Сантосе."},
+ steps:[{t:"Включите Git в папке",h:["git init"],c:r=>r.inited},
+  {t:"Спросите Git, что происходит",h:["git status"],c:r=>r.inited&&/^git status/.test(r.last)}],
+ quiz:[{q:"Что делает git init?",o:["Включает Git в текущей папке","Скачивает Git из интернета","Удаляет историю"],a:0,w:"Команду пишут один раз на папку."},
+  {q:"Какая команда отвечает «что происходит?»",o:["git log","git status","git init"],a:1,w:"Не понимаете, что творится, — пишите git status."},
+  {q:"Что будет, если удалить папку .git?",o:["Ничего страшного","Пропадёт вся история сохранений","Git станет быстрее"],a:1,w:"В .git лежат все коммиты. Её не трогаем."}]},
+{id:"commit",title:"Коммит",short:"git add и git commit",art:"zones",cap:"Файлы кладут в коробку, коробку заклеивают коммитом",
+ theory:`<p>Сохранение делается <b>в два шага</b>, как отправка посылки:</p>
+ <ul><li><code>git add файл</code> — <b>кладём в коробку</b>. Выбираем, что войдёт в сохранение.</li>
+ <li><code>git commit -m "подпись"</code> — <b>заклеиваем и подписываем</b>. Сохранение готово.</li></ul>
+ <p>Зачем коробка? Можно поменять пять файлов, а сохранить только два — те, что про одну задачу.</p>
+ <p><code>git add .</code> — точка значит «все файлы сразу».</p>
+ <div class="tip"><b>Хорошая подпись</b> понятна через полгода: «Добавил вступление», а не «правки».</div>`,
+ setup:r=>{r.quick(["git init"]);r.files[FILE]="Сюжет начинается в Лос-Сантосе."},
+ steps:[{t:"Положите "+FILE+" в коробку",h:["git add "+FILE],c:r=>FILE in r.index},
+  {t:"Сделайте первый коммит с подписью",h:['git commit -m "Первая версия"'],c:r=>r.count()>=1},
+  {t:"Создайте файл идеи.txt и тоже сохраните",h:["touch идеи.txt","git add .",'git commit -m "Добавил идеи"'],c:r=>r.count()>=2&&("идеи.txt" in r.H())}],
+ quiz:[{q:"Зачем нужна «коробка» (git add)?",o:["Чтобы выбрать, что попадёт в сохранение","Чтобы удалить файл","Чтобы отправить на GitHub"],a:0,w:"В коммит уходит только то, что лежит в коробке."},
+  {q:"Что значит точка в git add . ?",o:["Ничего","Все изменённые файлы в папке","Последний файл"],a:1,w:"Точка — «всё в этой папке»."},
+  {q:"Какая подпись коммита лучше?",o:["правки","asdf","Добавил вступление к сценарию"],a:2,w:"Пишите, что сделали, чтобы потом найти нужное сохранение."}]},
+{id:"log",title:"История",short:"git log и git diff",art:"history",cap:"Список сохранений: свежие сверху",
+ theory:`<p>Git помнит каждое сохранение. Посмотреть список — <code>git log --oneline</code>.</p>
+ <p>Слева в каждой строке — <b>хеш</b>, уникальный номер коммита, например <code>a1f3c9e</code>. По нему к коммиту можно вернуться.</p>
+ <p>Что именно вы поменяли и ещё не сохранили — <code>git diff</code>. Строки с <code>-</code> убраны, с <code>+</code> добавлены.</p>
+ <div class="tip"><b>В настоящем терминале</b> длинный список закрывается клавишей <kbd>q</kbd>.</div>`,
+ setup:r=>{r.files[FILE]="Сюжет начинается в Лос-Сантосе.";r.quick(["git init","git add .",'git commit -m "Первая версия"'])},
+ steps:[{t:"Поменяйте "+FILE,h:["edit "+FILE],c:r=>r.files[FILE]!==r.index[FILE]||r.count()>=2},
+  {t:"Посмотрите, что поменялось",h:["git diff"],c:r=>/^git diff/.test(r.last)||r.count()>=2},
+  {t:"Сохраните правку новым коммитом",h:["git add .",'git commit -m "Переписал начало"'],c:r=>r.count()>=2},
+  {t:"Посмотрите историю",h:["git log --oneline"],c:r=>r.count()>=2&&/^git log/.test(r.last)}],
+ quiz:[{q:"Что за набор символов слева в git log --oneline?",o:["Пароль","Хеш — номер коммита","Дата"],a:1,w:"Хеш нужен, чтобы сослаться на конкретный коммит."},
+  {q:"Какой коммит в git log наверху?",o:["Самый старый","Самый свежий"],a:1,w:"Свежие сверху, старые снизу."},
+  {q:"Что показывает git diff?",o:["Что поменялось, но ещё не сохранено","Список веток","Адрес GitHub"],a:0,w:"Минусы — убрано, плюсы — добавлено."}]},
+{id:"undo",title:"Отмена",short:"restore и revert",art:"undo",cap:"Три кнопки «назад» на разные случаи",
+ theory:`<p>Самый успокаивающий урок. Пока работа закоммичена, её почти невозможно потерять.</p>
+ <ul><li><b>Испортил файл, ещё не сохранял</b> → <code>git restore файл</code>. Файл станет как в последнем коммите.</li>
+ <li><b>Положил в коробку лишнее</b> → <code>git restore --staged файл</code>. Вынет из коробки, правки останутся.</li>
+ <li><b>Коммит был ошибкой</b> → <code>git revert хеш</code>. Git сделает новый коммит «наоборот».</li></ul>
+ <div class="warn"><b>Осторожно с git reset --hard.</b> Он навсегда стирает несохранённую работу. Новичку почти никогда не нужен.</div>`,
+ setup:r=>{r.files[FILE]="Сюжет начинается в Лос-Сантосе.";r.quick(["git init","git add .",'git commit -m "Первая версия"']);r.files[FILE]="Кот прошёлся по клавиатуре: ыввапролдж";r.files["черновик.txt"]="Пока не готово"},
+ steps:[{t:"Кот испортил "+FILE+". Верните сохранённую версию",h:["git restore "+FILE],c:r=>r.files[FILE]===r.H()[FILE]},
+  {t:"Положите черновик.txt в коробку",h:["git add черновик.txt"],c:r=>"черновик.txt" in r.index||r.events.includes("unstage")},
+  {t:"Передумали! Выньте черновик.txt из коробки",h:["git restore --staged черновик.txt"],c:r=>!("черновик.txt" in r.index)&&("черновик.txt" in r.files)}],
+ quiz:[{q:"Какой способ отменить коммит безопасен даже после отправки на GitHub?",o:["git revert","git reset --hard","Удалить папку .git"],a:0,w:"revert не переписывает историю, а добавляет коммит-отмену."},
+  {q:"git restore файл — что будет с несохранёнными правками в нём?",o:["Пропадут","Уйдут в коробку","Отправятся на GitHub"],a:0,w:"Поэтому restore делают, когда правки точно не нужны."},
+  {q:"Какую команду новичку лучше обходить?",o:["git status","git reset --hard","git log"],a:1,w:"Она стирает работу без возврата."}]},
+{id:"branch",title:"Ветки",short:"Черновик рядом с чистовиком",art:"branch",cap:"Ветка — отдельная линия истории",
+ theory:`<p><b>Ветка</b> — как копия проекта «на черновик». В ней пробуете что угодно, а основная версия остаётся целой.</p>
+ <p>Главная ветка обычно называется <code>main</code>.</p>
+ <ul><li><code>git switch -c имя</code> — создать ветку и перейти в неё</li>
+ <li><code>git switch имя</code> — перейти в другую ветку</li>
+ <li><code>git branch</code> — список веток, текущая со звёздочкой</li></ul>
+ <div class="tip"><b>Смотрите на граф справа</b>: новая ветка рисуется отдельной линией своего цвета.</div>`,
+ setup:r=>{r.files[FILE]="Сюжет начинается в Лос-Сантосе.";r.quick(["git init","git add .",'git commit -m "Первая версия"',"edit "+FILE,"git add .",'git commit -m "Глава 1"'])},
+ steps:[{t:"Создайте ветку glava2 и перейдите в неё",h:["git switch -c glava2"],c:r=>!!r.branches.glava2&&(r.head==="glava2"||!r.isAnc(r.branches.glava2,r.branches.main))},
+  {t:"Поменяйте "+FILE+" и закоммитьте в этой ветке",h:["edit "+FILE,"git add .",'git commit -m "Черновик главы 2"'],c:r=>!!r.branches.glava2&&!r.isAnc(r.branches.glava2,r.branches.main)},
+  {t:"Вернитесь в main: чистовик не тронут",h:["git switch main"],c:r=>r.head==="main"&&!!r.branches.glava2&&!r.isAnc(r.branches.glava2,r.branches.main)}],
+ quiz:[{q:"Что такое ветка?",o:["Отдельная линия истории для экспериментов","Копия на флешке","Папка .git"],a:0,w:"В ветке можно пробовать, не ломая main."},
+  {q:"Как создать ветку и сразу в неё перейти?",o:["git switch -c имя","git init имя","git add имя"],a:0,w:"-c значит create, «создать»."},
+  {q:"Как обычно называется главная ветка?",o:["first","main","root"],a:1,w:"В старых проектах встречается master."}]},
+{id:"merge",title:"Слияние и конфликт",short:"git merge без паники",art:"merge",cap:"Ветки сходятся в коммите слияния",
+ theory:`<p>Эксперимент удался — переносим его в <code>main</code>: встаём в <code>main</code> и пишем <code>git merge имя_ветки</code>.</p>
+ <p><b>Конфликт</b> — не поломка. Он бывает, когда в двух ветках по-разному поменяли <b>одну и ту же строку</b>. Git не угадывает и спрашивает вас. В файле появятся маркеры:</p>
+ <pre style="background:var(--term-bg);color:var(--term-fg);padding:10px 12px;border-radius:8px;overflow-x:auto;font:13px/1.5 var(--f-mono);margin:0 0 12px">&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD
+Начало в Лос-Сантосе.
+=======
+Начало в Сан-Фиерро.
+&gt;&gt;&gt;&gt;&gt;&gt;&gt; spor</pre>
+ <p>Что делать: открыть файл, оставить нужный текст, стереть маркеры, потом <code>git add</code> и <code>git commit</code>.</p>
+ <div class="tip"><b>Испугались?</b> <code>git merge --abort</code> отменит слияние целиком.</div>`,
+ setup:r=>{r.files[FILE]="Сюжет начинается.";r.quick(["git init","git add .",'git commit -m "Первая версия"',"git branch idei","git branch spor","git switch idei","touch идеи.txt","git add .",'git commit -m "Список идей"',"git switch spor","edit "+FILE,"git add .",'git commit -m "Начало в Сан-Фиерро"',"git switch main","edit "+FILE,"git add .",'git commit -m "Начало в Лос-Сантосе"'])},
+ steps:[{t:"Влейте ветку idei в main",h:["git merge idei"],c:r=>r.isAnc(r.branches.idei,r.branches.main)},
+  {t:"Теперь влейте spor — будет конфликт",h:["git merge spor"],c:r=>!!r.merging||r.isAnc(r.branches.spor,r.branches.main)},
+  {t:"Посмотрите файл и поправьте его",h:["cat "+FILE,"edit "+FILE],c:r=>(!!r.merging&&!r.conflicts.length)||r.isAnc(r.branches.spor,r.branches.main)},
+  {t:"Положите в коробку и закоммитьте слияние",h:["git add .",'git commit -m "Слил spor, решил конфликт"'],c:r=>r.isAnc(r.branches.spor,r.branches.main)}],
+ quiz:[{q:"Когда случается конфликт?",o:["Когда одна строка поменяна по-разному в двух ветках","Когда нет интернета","Когда коммитов больше десяти"],a:0,w:"Git не знает, какой вариант верный, и спрашивает вас."},
+  {q:"Что делать с маркерами <<<<<<< ======= >>>>>>>?",o:["Оставить как есть","Выбрать нужный текст и стереть маркеры","Удалить весь файл"],a:1,w:"Потом git add и git commit — конфликт решён."},
+  {q:"Как отменить слияние, если запутались?",o:["git merge --abort","git push","git init"],a:0,w:"Всё вернётся как было до merge."}]},
+{id:"cloud",title:"GitHub",short:"push и pull",art:"cloud",cap:"push — отправить, pull — забрать",
+ theory:`<p>Пока история только на вашем компьютере. Сломается диск — пропадёт всё. <b>GitHub</b> хранит копию в облаке.</p>
+ <ul><li><code>git remote add origin адрес</code> — один раз привязать облако</li>
+ <li><code>git push</code> — <b>отправить</b> свои коммиты на GitHub</li>
+ <li><code>git pull</code> — <b>забрать</b> чужие коммиты к себе</li></ul>
+ <div class="tip"><b>Правило дня:</b> начали работу — <code>pull</code>, закончили — <code>push</code>. Так меньше конфликтов.</div>
+ <div class="warn"><b>Пароль от сайта не подойдёт.</b> Для push нужен токен или вход через GitHub Desktop / VS Code.</div>`,
+ setup:r=>{r.files[FILE]="Сюжет начинается в Лос-Сантосе.";r.quick(["git init","git add .",'git commit -m "Первая версия"']);
+   r.onPush=rr=>{if(rr.pushed!==1)return"";const rt=rr.remoteBranches.main;const t={...rr.tree(rt),"заметки_коллеги.txt":"Коллега: отличное начало!"};rr.remoteBranches.main=rr.mk("Заметки коллеги",[rt],t,"Коллега",0);return"[!] Пока вы отдыхали, коллега отправил в облако свой коммит. Заберите его: git pull"}},
+ steps:[{t:"Привяжите облако GitHub",h:["git remote add origin https://github.com/вы/сценарии.git"],c:r=>!!r.remote},
+  {t:"Отправьте свою работу в облако",h:["git push -u origin main"],c:r=>r.pushed>=1},
+  {t:"Коллега что-то добавил. Заберите себе",h:["git pull"],c:r=>r.pushed>=1&&("заметки_коллеги.txt" in r.files)}],
+ quiz:[{q:"Какая команда отправляет коммиты на GitHub?",o:["git pull","git push","git add"],a:1,w:"push — толкнуть наверх, в облако."},
+  {q:"Что делать в начале рабочего дня?",o:["git pull","git init","git reset --hard"],a:0,w:"Сначала забрать свежее, потом работать."},
+  {q:"Git просит пароль при push. Подойдёт пароль от сайта GitHub?",o:["Да","Нет, нужен токен или вход через приложение"],a:1,w:"GitHub давно не принимает обычный пароль в терминале."}]},
+{id:"final",title:"Экзамен",short:"Финальный босс",art:"trophy",cap:"Пройдите экзамен — и вы гит-гуру",free:true,
+ theory:`<p>Вы прошли весь путь: сохранения, коробка, история, отмена, ветки, слияния и облако.</p>
+ <p>Ниже — <b>свободная песочница</b>: пробуйте любые команды, ломайте, чините. А потом — экзамен из вопросов по всем урокам.</p>
+ <div class="tip"><b>Шпаргалка:</b> <code>status</code> · <code>add .</code> · <code>commit -m</code> · <code>log --oneline</code> · <code>switch -c</code> · <code>merge</code> · <code>push</code> · <code>pull</code></div>`,
+ setup:r=>{r.files[FILE]="Сюжет начинается в Лос-Сантосе.";r.files["идеи.txt"]="Погоня, финал на крыше"},
+ steps:[],
+ quiz:[{q:"Вы поменяли файл. Как его сохранить?",o:["git commit сразу","git add, потом git commit -m","git push"],a:1,w:"Сначала в коробку, потом коммит."},
+  {q:"Не понимаете, что происходит. Что набрать?",o:["git status","git reset --hard","git init"],a:0,w:"status — лучший друг."},
+  {q:"Хотите попробовать рискованную идею, не ломая main. Что сделать?",o:["Создать ветку","Удалить .git","Сделать push"],a:0,w:"git switch -c идея — и экспериментируйте."},
+  {q:"push отклонён: «в облаке есть чужие коммиты». Что делать?",o:["git pull, потом git push","Удалить репозиторий","Ждать"],a:0,w:"Заберите чужое, потом отправьте своё."},
+  {q:"Какой файл говорит Git не замечать видео и пароли?",o:[".gitignore","README.md",".git"],a:0,w:"Пароли в Git не кладут никогда."},
+  {q:"Коммит уже на GitHub, но оказался ошибкой. Как отменить?",o:["git revert хеш","git commit --amend","git restore"],a:0,w:"revert не трогает общую историю."}]}
+];
+
+const BADGES=[
+ {id:"first",n:"Первое сохранение",d:"Сделать первый коммит",i:"1"},
+ {id:"brancher",n:"Ветковод",d:"Создать ветку",i:"Y"},
+ {id:"peace",n:"Миротворец",d:"Решить конфликт",i:"="},
+ {id:"cloud",n:"Облачник",d:"Отправить push",i:"↑"},
+ {id:"undo",n:"Машина времени",d:"Вернуть испорченный файл",i:"↺"},
+ {id:"smart",n:"Отличник",d:"Ответить на все вопросы урока с первого раза",i:"A"},
+ {id:"solo",n:"Без подсказок",d:"Пройти практику без подсказок",i:"★"},
+ {id:"guru",n:"Гит-гуру",d:"Пройти все уровни",i:"G"}];
+const LEVELS=[[0,"Чайник"],[100,"Ученик"],[250,"Сохраняльщик"],[450,"Ветковод"],[600,"Мастер слияний"],[780,"Гит-гуру"]];
+
+/* ---------- state ---------- */
+let cur=Math.min(store.cur||0,L.length-1),repo=null,stepIdx=0,hintsUsed=false,histCmd=[],histPos=0,outLines=[];
+
+/* ---------- gamification ---------- */
+function addXP(n,why){store.xp+=n;save();renderBar();toast("+"+n+" XP · "+why)}
+function badge(id){if(store.badges.includes(id))return;store.badges.push(id);save();const b=BADGES.find(x=>x.id===id);toast("Новый значок: "+b.n,"gold");renderBar();burst(40)}
+function levelOf(xp){let i=0;for(let k=0;k<LEVELS.length;k++)if(xp>=LEVELS[k][0])i=k;return i}
+function renderBar(){
+  const i=levelOf(store.xp),lo=LEVELS[i][0],hi=LEVELS[i+1]?LEVELS[i+1][0]:lo;
+  $("#lvlNum").textContent="Ур. "+(i+1);$("#lvlName").textContent=LEVELS[i][1];
+  $("#xpFill").style.width=(hi>lo?Math.min(100,(store.xp-lo)/(hi-lo)*100):100)+"%";
+  $("#xpText").textContent=store.xp+(LEVELS[i+1]?" / "+hi:"")+" XP";
+  $("#bCount").textContent=store.badges.length+"/"+BADGES.length;
+}
+let lastLvl=levelOf(store.xp);
+function checkLevelUp(){const l=levelOf(store.xp);if(l>lastLvl){lastLvl=l;toast("Новый уровень: "+LEVELS[l][1]+"!","gold");burst(90)}}
+function toast(t,cls){const d=document.createElement("div");d.className="toast "+(cls||"");d.textContent=t;const T=$("#toasts");T.appendChild(d);while(T.children.length>3)T.firstChild.remove();setTimeout(()=>d.remove(),2800);checkLevelUp()}
+
+/* confetti */
+const cv=$("#fx"),cx=cv.getContext("2d");let parts=[],raf=0;
+const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+function burst(n){if(reduce)return;cv.width=innerWidth;cv.height=innerHeight;const cs=getComputedStyle(document.documentElement);const cols=["--lane0","--lane1","--lane2","--lane3"].map(v=>cs.getPropertyValue(v).trim());
+  for(let i=0;i<n;i++)parts.push({x:innerWidth/2,y:innerHeight/3,vx:(Math.random()-.5)*12,vy:-Math.random()*10-3,s:4+Math.random()*5,c:cols[i%4],life:90+Math.random()*40,r:Math.random()*6});
+  if(!raf)raf=requestAnimationFrame(tick)}
+function tick(){cx.clearRect(0,0,cv.width,cv.height);parts=parts.filter(p=>p.life-->0);for(const p of parts){p.vy+=.3;p.x+=p.vx;p.y+=p.vy;p.r+=.1;cx.save();cx.translate(p.x,p.y);cx.rotate(p.r);cx.fillStyle=p.c;cx.fillRect(-p.s/2,-p.s/2,p.s,p.s*1.6);cx.restore()}raf=parts.length?requestAnimationFrame(tick):0;if(!raf)cx.clearRect(0,0,cv.width,cv.height)}
+
+/* ---------- map ---------- */
+function renderMap(){
+  const firstOpen=L.findIndex(l=>!ls(l.id).done);
+  $("#map").innerHTML=L.map((l,i)=>{const s=ls(l.id);const cls=[s.done?"done":"",i===firstOpen?"next":"",i===cur?"cur":""].join(" ");
+    const st=[0,1,2].map(k=>k<s.stars?"★":'<span class="off">★</span>').join("");
+    return `<li class="${cls}"><button type="button" data-i="${i}" aria-current="${i===cur?"step":"false"}"><span class="node">${s.done?"✓":i+1}</span><span><span class="mt">${esc(l.title)}</span><span class="ms" aria-label="звёзд: ${s.stars}">${s.done?st:""}</span></span></button></li>`}).join("");
+}
+$("#map").addEventListener("click",e=>{const b=e.target.closest("button[data-i]");if(b)openLesson(+b.dataset.i,true)});
+
+/* ---------- lesson stage ---------- */
+function openLesson(i,scroll){
+  cur=i;store.cur=i;save();const l=L[i];const s=ls(l.id);
+  repo=new Repo();if(l.setup)l.setup(repo);stepIdx=0;hintsUsed=false;outLines=[];
+  const hasPractice=!!l.setup;
+  $("#stage").innerHTML=`
+  <div class="hero"><div><div class="eyebrow">Уровень ${i+1} из ${L.length}</div><h1>${esc(l.title)}</h1><p>${esc(l.short)}</p></div>
+   <div class="reward">${hasPractice&&l.steps.length?`<span class="chip">+${l.steps.length*10} XP практика</span>`:""}<span class="chip">+${l.quiz.length*10} XP вопросы</span><span class="chip">+50 XP за уровень</span></div></div>
+  <section class="block"><h2><span class="step">1</span>Разбираемся</h2><p class="sub">Читаем минуту — и сразу в бой.</p>
+   <div class="theory"><div class="txt">${l.theory}</div><figure class="art" style="margin:0">${ART[l.art]}<figcaption>${esc(l.cap)}</figcaption></figure></div></section>
+  ${hasPractice?`<section class="block"><h2><span class="step">2</span>${l.free?"Песочница":"Практика"}</h2><p class="sub">${l.free?"Свободный режим: любые команды. Наберите help.":"Выполните задания в терминале. Справа видно, что происходит внутри Git."}</p>
+   ${l.steps.length?'<ol class="mission" id="mission"></ol>':""}
+   <div class="sim"><div class="term"><div class="term-top"><i></i><i></i><i></i><span>~/сценарии</span><button type="button" id="resetSim">Заново</button></div>
+     <div class="out" id="out" aria-live="polite"></div>
+     <form class="inrow" id="termForm" autocomplete="off"><label for="cmd">$</label><input id="cmd" type="text" spellcheck="false" autocapitalize="off" autocorrect="off" placeholder="напишите команду…"><button type="submit">Ввод</button></form></div>
+    <div class="visual" id="visual"></div></div></section>`:""}
+  <section class="block" id="quiz"><h2><span class="step">${hasPractice?3:2}</span>${l.free?"Экзамен":"Проверь себя"}</h2><p class="sub">Первый правильный ответ — +10 XP. Ошиблись — читайте пояснение и пробуйте снова.</p><div id="qs"></div></section>
+  <section class="block finish" id="finish"></section>`;
+  renderMap();renderQuiz();
+  if(hasPractice){
+    print([{t:l.free?"Песочница готова. Наберите help, чтобы увидеть команды.":"Терминал готов. Первое задание — сверху. Застряли — жмите «Подсказка».",c:"dim"}]);
+    $("#termForm").addEventListener("submit",e=>{e.preventDefault();exec($("#cmd").value)});
+    $("#cmd").addEventListener("keydown",e=>{if(e.key==="ArrowUp"){if(histPos>0){histPos--;$("#cmd").value=histCmd[histPos]||""}e.preventDefault()}else if(e.key==="ArrowDown"){if(histPos<histCmd.length){histPos++;$("#cmd").value=histCmd[histPos]||""}e.preventDefault()}});
+    $("#resetSim").addEventListener("click",()=>{repo=new Repo();l.setup(repo);stepIdx=0;outLines=[];print([{t:"Начали задание заново.",c:"dim"}]);renderMission();renderVisual()});
+    renderMission();renderVisual();
+  }
+  renderFinish();
+  if(scroll)window.scrollTo({top:0,behavior:reduce?"auto":"smooth"});
+}
+function print(lines){const o=$("#out");if(!o)return;for(const x of lines){if(x.c==="clear"){outLines=[];continue}outLines.push(x)}o.innerHTML=outLines.slice(-200).map(x=>`<div class="${x.c}">${esc(x.t)}</div>`).join("");o.scrollTop=o.scrollHeight}
+function exec(line){
+  line=line.trim();if(!line)return;$("#cmd").value="";histCmd.push(line);histPos=histCmd.length;
+  repo.events=[];const res=repo.run(line);print([{t:line,c:"cmd"}].concat(res));
+  for(const e of repo.events){if(e==="commit")badge("first");if(e==="branch")badge("brancher");if(e==="merge-resolved")badge("peace");if(e==="push")badge("cloud");if(e==="restore"&&L[cur].id==="undo")badge("undo")}
+  advance();renderVisual();
+}
+function advance(){
+  const l=L[cur],s=ls(l.id);let moved=false;
+  while(stepIdx<l.steps.length&&l.steps[stepIdx].c(repo)){
+    if(!s.awarded.includes(stepIdx)){s.awarded.push(stepIdx);save();addXP(10,"задание выполнено")}
+    stepIdx++;moved=true}
+  if(moved){renderMission();if(stepIdx===l.steps.length){print([{t:"Все задания выполнены! Теперь вопросы ниже.",c:"ok"}]);if(!hintsUsed)badge("solo");burst(50);renderFinish()}}
+}
+function renderMission(){
+  const m=$("#mission");if(!m)return;const l=L[cur];
+  m.innerHTML=l.steps.map((st,i)=>{const cls=i<stepIdx?"ok":i===stepIdx?"now":"";
+    return `<li class="${cls}"><span class="ck">${i<stepIdx?"✓":i+1}</span><span>${esc(st.t)}</span>${i===stepIdx?`<button type="button" class="hintbtn" data-h="${i}">Подсказка</button>`:"<span></span>"}<div class="hintcmds" id="h${i}" hidden></div></li>`}).join("");
+  m.querySelectorAll(".hintbtn").forEach(b=>b.addEventListener("click",()=>{const i=+b.dataset.h,box=$("#h"+i);hintsUsed=true;
+    box.innerHTML=L[cur].steps[i].h.map(c=>`<button type="button" title="Вставить в терминал">${esc(c)}</button>`).join("");box.hidden=false;b.remove();
+    box.querySelectorAll("button").forEach(x=>x.addEventListener("click",()=>{$("#cmd").value=x.textContent;$("#cmd").focus()}))}));
+}
+function renderVisual(){
+  const v=$("#visual");if(!v)return;const r=repo,H=r.H(),I=r.index,W=r.files;
+  const wf=Object.keys(W).map(f=>{let c="",t="";if(r.conflicts.includes(f)){c="conf";t="конфликт"}else if(!(f in I)){c="new";t="новый"}else if(W[f]!==I[f]){c="mod";t="изменён"}return `<div class="file ${c}" title="${esc(f)}">${esc(f)}${t?`<small>${t}</small>`:""}</div>`}).join("")||'<div class="empty">пусто</div>';
+  const staged=[...new Set([...Object.keys(I),...Object.keys(H)])].filter(f=>I[f]!==H[f]);
+  const bf=staged.map(f=>`<div class="file ${f in H?"mod":"new"}">${esc(f)}</div>`).join("")||'<div class="empty">коробка пуста</div>';
+  const hf=r.inited?(Object.keys(H).map(f=>`<div class="file">${esc(f)}</div>`).join("")||'<div class="empty">ещё нет коммитов</div>'):'<div class="empty">Git выключен — нужен git init</div>';
+  v.innerHTML=`<div class="zones">
+    <div class="zone"><h3>Папка</h3><p class="zs">файлы, как они есть</p><div class="files">${wf}</div></div>
+    <div class="zone box"><h3>Коробка</h3><p class="zs">уйдёт в коммит</p><div class="files">${bf}</div></div>
+    <div class="zone hist"><h3>Сохранено</h3><p class="zs">последний коммит</p><div class="files">${hf}</div></div></div>
+   <div class="flow"><span>git add →</span><span>git commit →</span></div>
+   <div class="graphbox"><h3>Граф коммитов <span>ветка: <b>${esc(r.head)}</b>${r.merging?" · идёт слияние":""}</span></h3><div class="graph">${graph(r)}</div></div>
+   ${r.remote?`<div class="cloud"><b>GitHub:</b> ${r.remoteBranches.main?(r.isAnc(r.remoteBranches.main,r.tip("main"))?(r.remoteBranches.main===r.tip("main")?"всё отправлено":"у вас есть неотправленные коммиты"):"в облаке есть новое — нужен git pull"):"пока пусто"}</div>`:""}`;
+}
+function graph(r){
+  if(!r.inited)return '<p class="empty" style="margin:8px 0 12px">Репозитория нет. Наберите git init</p>';
+  const tips=[...Object.values(r.branches),...Object.values(r.remoteBranches)];
+  const vis=new Set();tips.forEach(t=>r.anc(t).forEach(x=>vis.add(x)));
+  const local=new Set();Object.values(r.branches).forEach(t=>r.anc(t).forEach(x=>local.add(x)));
+  const cs=[...vis].map(i=>r.commits[i]).sort((a,b)=>a.seq-b.seq);
+  if(!cs.length)return '<p class="empty" style="margin:8px 0 12px">Сохранений пока нет. Сделайте первый коммит!</p>';
+  const pos={};const maxLane=Math.max(0,...cs.map(c=>c.lane));const X=i=>36+i*62,Y=l=>56+l*54;
+  cs.forEach((c,i)=>pos[c.id]={x:X(i),y:Y(c.lane)});
+  const W=X(cs.length-1)+80,Hh=Y(maxLane)+44;
+  let s=`<svg width="${W}" height="${Hh}" viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Граф коммитов">`;
+  for(const c of cs)for(const p of c.parents){if(!pos[p])continue;const a=pos[p],b=pos[c.id];const col=`var(--lane${(a.y===b.y?c.lane:Math.max(c.lane,r.commits[p].lane))%4})`;
+    s+=a.y===b.y?`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${col}" stroke-width="3"/>`:`<path d="M${a.x} ${a.y} C ${a.x+40} ${a.y}, ${b.x-40} ${b.y}, ${b.x} ${b.y}" stroke="${col}" stroke-width="3" fill="none"/>`}
+  const labels={};
+  for(const b in r.branches)(labels[r.branches[b]]=labels[r.branches[b]]||[]).push({t:b,head:b===r.head});
+  for(const b in r.remoteBranches)(labels[r.remoteBranches[b]]=labels[r.remoteBranches[b]]||[]).push({t:"origin/"+b,remote:true});
+  for(const c of cs){const p=pos[c.id],col=`var(--lane${c.lane%4})`,isLocal=local.has(c.id);
+    s+=`<g><title>${esc(c.id+" — "+c.msg+" ("+c.author+")")}</title><circle cx="${p.x}" cy="${p.y}" r="10" fill="${isLocal?col:"var(--surface)"}" stroke="${col}" stroke-width="3" ${isLocal?"":'stroke-dasharray="3 3"'}/>${c.parents.length>1?`<circle cx="${p.x}" cy="${p.y}" r="4" fill="var(--surface)"/>`:""}
+    <text x="${p.x}" y="${p.y+26}" text-anchor="middle" font-size="10" font-family="var(--f-body)" fill="var(--muted)">${esc(c.msg.length>11?c.msg.slice(0,10)+"…":c.msg)}</text></g>`;
+    (labels[c.id]||[]).forEach((lb,k)=>{const ty=p.y-20-k*18,w=lb.t.length*6.6+(lb.head?14:10);
+      s+=`<g><rect x="${p.x-w/2}" y="${ty-12}" width="${w}" height="16" rx="8" fill="${lb.remote?"var(--info-soft)":lb.head?col:"var(--surface2)"}" stroke="${lb.remote?"var(--info)":col}" stroke-width="1"/><text x="${p.x}" y="${ty}" text-anchor="middle" font-size="10.5" font-family="var(--f-mono)" font-weight="600" fill="${lb.remote?"var(--info)":lb.head?"var(--accent-fg)":"var(--fg)"}">${esc((lb.head?"▸":"")+lb.t)}</text></g>`})}
+  return s+"</svg>";
+}
+/* graph top margin: labels can stack above first lane */
+
+function renderQuiz(){
+  const l=L[cur],s=ls(l.id);
+  $("#qs").innerHTML=l.quiz.map((q,qi)=>{const st=s.quiz[qi];const done=st&&st.ok;
+    return `<div class="q" data-q="${qi}"><h3>${qi+1}. ${esc(q.q)}</h3><div class="opts">${q.o.map((o,oi)=>`<button type="button" class="opt ${done&&oi===q.a?"right":""}" data-o="${oi}" ${done?"disabled":""}>${esc(o)}</button>`).join("")}</div>${done?`<div class="why r">Верно! ${esc(q.w)}</div>`:""}</div>`}).join("");
+  $("#qs").querySelectorAll(".opt").forEach(b=>b.addEventListener("click",()=>{
+    const qd=b.closest(".q"),qi=+qd.dataset.q,oi=+b.dataset.o,q=l.quiz[qi];const st=s.quiz[qi]||(s.quiz[qi]={first:null,ok:false});
+    const right=oi===q.a;if(st.first===null)st.first=right;
+    qd.querySelectorAll(".why").forEach(x=>x.remove());
+    const w=document.createElement("div");w.className="why "+(right?"r":"w");w.textContent=(right?"Верно! ":"Не совсем. ")+q.w;qd.appendChild(w);
+    if(right){st.ok=true;b.classList.add("right");qd.querySelectorAll(".opt").forEach(x=>x.disabled=true);if(st.first)addXP(10,"верный ответ");else toast("Засчитано со второй попытки")}
+    else b.classList.add("wrong");
+    save();
+    if(l.quiz.every((_,k)=>s.quiz[k]&&s.quiz[k].ok)){if(l.quiz.every((_,k)=>s.quiz[k].first))badge("smart");renderFinish()}
+  }));
+}
+function renderFinish(){
+  const l=L[cur],s=ls(l.id),f=$("#finish");
+  const practiceOk=!l.steps||!l.steps.length||stepIdx>=l.steps.length||s.done;
+  const quizOk=l.quiz.every((_,k)=>s.quiz[k]&&s.quiz[k].ok);
+  const perfect=l.quiz.every((_,k)=>s.quiz[k]&&s.quiz[k].first);
+  const noHints=!hintsUsed;
+  const stars=1+(perfect?1:0)+(noHints?1:0);
+  if(!(practiceOk&&quizOk)&&!s.done){
+    f.innerHTML=`<h2>Финиш уровня</h2><p class="locked">${!practiceOk?"Осталось: выполнить практику. ":""}${!quizOk?"Осталось: ответить на все вопросы.":""}</p><button class="big" type="button" disabled>Завершить уровень</button>`;return}
+  const show=s.done?Math.max(s.stars,0):stars;
+  const isLast=cur===L.length-1;
+  f.innerHTML=`<h2>${s.done?"Уровень пройден":"Уровень готов к сдаче!"}</h2><div class="stars" aria-label="звёзд: ${show}">${[0,1,2].map(k=>k<show?"★":'<span class="off">★</span>').join("")}</div>
+   <ul><li>★ — уровень пройден</li><li>${perfect?"★":"☆"} — все ответы с первого раза</li><li>${noHints||s.done?"★":"☆"} — практика без подсказок</li></ul>
+   <button class="big" type="button" id="finBtn">${s.done?(isLast?"Ещё раз с начала":"Следующий уровень →"):"Завершить уровень +50 XP"}</button>`;
+  $("#finBtn").addEventListener("click",()=>{
+    if(!s.done){s.done=true;s.stars=stars;save();addXP(50,"уровень пройден");burst(120);if(L.every(x=>ls(x.id).done))badge("guru");renderMap();renderFinish();return}
+    openLesson(isLast?0:cur+1,true)});
+}
+
+/* ---------- badges dialog & reset ---------- */
+$("#badgesBtn").addEventListener("click",()=>{
+  const o=document.createElement("div");o.className="overlay";
+  o.innerHTML=`<div class="dlg" role="dialog" aria-modal="true" aria-label="Значки"><h2>Значки <button type="button" aria-label="Закрыть">×</button></h2><div class="bgrid">${BADGES.map(b=>`<div class="bdg ${store.badges.includes(b.id)?"":"off"}"><div class="ic">${esc(b.i)}</div><b>${esc(b.n)}</b><span>${esc(b.d)}</span></div>`).join("")}</div></div>`;
+  document.body.appendChild(o);const close=()=>o.remove();o.addEventListener("click",e=>{if(e.target===o||e.target.closest("h2 button"))close()});
+  document.addEventListener("keydown",function k(e){if(e.key==="Escape"){close();document.removeEventListener("keydown",k)}});o.querySelector("h2 button").focus()});
+let armT=0;$("#reset").addEventListener("click",e=>{const b=e.currentTarget;
+  if(!b.classList.contains("arm")){b.classList.add("arm");b.textContent="Точно стереть прогресс?";clearTimeout(armT);armT=setTimeout(()=>{b.classList.remove("arm");b.textContent="Начать заново"},3000);return}
+  store={xp:0,lessons:{},badges:[],cur:0};lastLvl=0;save();b.classList.remove("arm");b.textContent="Начать заново";renderBar();openLesson(0,true)});
+
+renderBar();openLesson(cur,false);
+})();
+</script>
