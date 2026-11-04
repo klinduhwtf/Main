@@ -37,7 +37,7 @@ const audio = target => {
 };
 
 const targets = {
-  mp4: { file: `${V.name}.mp4`, lufs: -16,
+  mp4: { file: `${V.name}.mp4`, lufs: -17.9,   // на 20% тише прежних −16
     v: ["-vf", VF + ",format=yuv420p", "-c:v", "libx264", "-preset", "slow", "-crf", "19",
         "-profile:v", "high", "-movflags", "+faststart", ...COLOR],
     a: ["-c:a", "aac", "-b:a", "320k", "-ar", "48000"] },

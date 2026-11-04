@@ -21,15 +21,15 @@
 
 <script>
 // ---------- Тайминги (совпадают со звуком zvuk.py) ----------
-const VOICE_L = 0.15;   // левый голос входит в кадр
-const VOICE_R = 0.55;   // правый голос отвечает
-const MEET = 1.8;       // голоса встречаются в центре: вырастает узор, вспыхивает «лист»
-const HORNS = 3.0;      // узор дорисован
-const SETTLE0 = 3.0, SETTLE1 = 4.0;   // узор уходит наверх, уступая место слову
-const WORD0 = 3.45;     // буквы «ТЕЛЕЦЕНТР»
-const LINE0 = 4.3;      // живая линия голоса под словом
-const WIPE = 7.8;       // бирюзовая шторка — переход в студию
-const END = 8.6;
+const VOICE_L = 0.2;    // левый голос входит в кадр
+const VOICE_R = 0.9;    // правый голос отвечает
+const MEET = 3.3;       // голоса встречаются в центре: вырастает узор, вспыхивает «лист»
+const HORNS = 4.5;      // узор дорисован
+const SETTLE0 = 4.5, SETTLE1 = 5.5;   // узор уходит наверх, уступая место слову
+const WORD0 = 4.95;     // буквы «ТЕЛЕЦЕНТР»
+const LINE0 = 5.8;      // живая линия голоса под словом
+const WIPE = 9.3;       // бирюзовая шторка — переход в студию
+const END = 10.1;
 
 const C = {
   paper: "#f3f0e9", ink: "#0f2830", tq: "#00a3b8", tqRGB: "0,163,184", yellow: "#fdd327",
@@ -110,7 +110,7 @@ function measure() {
   const letters = [...WORD].map(ch => { const m = ctx.measureText(ch); return { ch, adv: m.width, abl: m.actualBoundingBoxLeft, abr: m.actualBoundingBoxRight }; });
   const capH = ctx.measureText("Н").actualBoundingBoxAscent;
   const ornH = (ORN_BOTTOM - ORN_TOP) * ORN_FINAL;
-  const gap = capH * 0.85, lineGap = capH * 0.6, lineAmp = 12;
+  const gap = capH * 0.85, lineGap = capH * 0.7, lineAmp = 20;
   const total = ornH + gap + capH + lineGap + lineAmp;
   const top = 540 - 10 - total / 2;
   const track = TRACK * WORD_SIZE;
@@ -133,7 +133,7 @@ function measure() {
 function speech(x, t, seed) {
   // «слоги»: огибающая из нескольких синусов, сама волна — частая
   const env = Math.max(0, Math.sin(x * 0.011 + seed) * 0.6 + Math.sin(x * 0.027 + seed * 2.3 + t * 2) * 0.5 + 0.25);
-  return env * Math.sin(x * 0.16 - t * 22 + seed);
+  return env * Math.sin(x * 0.12 - t * 13 + seed);
 }
 function voice(t, side) {
   const t0 = side < 0 ? VOICE_L : VOICE_R;
@@ -143,14 +143,16 @@ function voice(t, side) {
   const xEdge = side < 0 ? -40 : 1960;
   const hx = lerp(xEdge, 960, head), tx = lerp(xEdge, 960, tail);
   ctx.save();
-  ctx.strokeStyle = C.tq; ctx.lineWidth = 5; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  const swell = eio2(prog(t, t0, t0 + 1.6));                   // голос нарастает плавно, без рывка
+  ctx.globalAlpha = eio2(prog(t, t0, t0 + 0.8));
+  ctx.strokeStyle = C.tq; ctx.lineWidth = 11; ctx.lineCap = "round"; ctx.lineJoin = "round";
   ctx.beginPath();
-  const n = 260;
+  const n = 320;
   for (let i = 0; i <= n; i++) {
     const x = lerp(tx, hx, i / n);
     const nearHead = clamp(Math.abs(hx - x) / 220);           // к голове волна затихает в точку
     const nearCenter = clamp(Math.abs(960 - x) / 260);        // у центра — прямая, чтобы влиться в узел
-    const a = 46 * speech(x * side, t, side < 0 ? 1.3 : 4.1) * nearHead * nearCenter * (1 - tail);
+    const a = 58 * swell * speech(x * side, t, side < 0 ? 1.3 : 4.1) * nearHead * nearCenter * (1 - tail);
     i ? ctx.lineTo(x, M.voiceY + a) : ctx.moveTo(x, M.voiceY + a);
   }
   ctx.stroke();
@@ -204,13 +206,13 @@ function liveLine(t) {
   if (k <= 0) return;
   const half = (M.right - M.left) / 2 * k;
   ctx.save();
-  ctx.strokeStyle = C.tq; ctx.lineWidth = 3; ctx.lineCap = "round";
+  ctx.strokeStyle = C.tq; ctx.lineWidth = 9; ctx.lineCap = "round"; ctx.lineJoin = "round";
   ctx.beginPath();
   const n = 240;
   for (let i = 0; i <= n; i++) {
     const x = 960 - half + 2 * half * i / n;
     const edge = Math.sin(Math.PI * i / n);                    // по краям — тише
-    const a = 9 * speech(x, t * 0.6, 2.2) * edge * edge;
+    const a = 13 * speech(x, t * 0.6, 2.2) * edge * edge;
     i ? ctx.lineTo(x, M.lineY + a) : ctx.moveTo(x, M.lineY + a);
   }
   ctx.stroke();
