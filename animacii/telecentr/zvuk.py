@@ -1,16 +1,14 @@
-"""Звук для заставки «ТЕЛЕЦЕНТР» — та же оркестровая основа, что у «1 СТУДИЯ» v4,
-чтобы заставки канала звучали одной семьёй, плюс свои детали: перелив и «сигнал эфира».
+"""Звук для заставки «ТЕЛЕЦЕНТР» — «Два голоса». Домбра + современная подложка.
 
-Синтез с нуля (без сэмплов). Тайминги совпадают с zastavka.html:
-  0.0–3.2  гул в ре, «воздух», мягкая дробь литавр нарастает
-  0.9–3.2  восходящий перелив (челеста) — вышка прорисовывается снизу вверх
-  3.2      глубокий удар + аккорд Dsus2 — загорается маяк
-  3.2, 3.65, 4.1, 6.4  «сигнал эфира» — волны от маяка
-  4.4      аккорд разрешается в ре мажор — появляется «СТУДИЯ»
-  5.8      тихий высокий звон на блике
-  8.2–9.0  затухание
-Выход: zvuk.wav (48 кГц, 24 бит, стерео).
-Запуск: python3 zvuk.py
+Синтез с нуля, без сэмплов: домбра — щипковая модель Карплуса — Стронга (две струны, кварта ре–соль),
+удары — синусоидальный саб и шум. Тайминги совпадают с zastavka.html:
+  0.15–1.8  перекличка двух фраз домбры: левый голос, ответ правого (по панораме)
+  1.8       встреча: удар по обеим струнам + саб — вырастает узор, вспыхивает «лист»
+  1.8–3.0   нарастающий бой домбры (как в күй), подложка раскрывается
+  3.45      аккорд на появлении слова
+  4.3–7.8   спокойный ритм домбры и подложка под живой линией
+  7.8       шторка: свист и финальный удар
+Выход: zvuk.wav (48 кГц, 24 бит, стерео). Запуск: python3 zvuk.py
 """
 import wave
 from pathlib import Path
@@ -19,9 +17,9 @@ import numpy as np
 from scipy import signal
 
 SR = 48000
-DUR = 9.0
-REVEAL, WORD0, SHINE = 3.2, 4.4, 5.8
-rng = np.random.default_rng(7)
+DUR = 8.6
+VOICE_L, VOICE_R, MEET, HORNS, WORD0, LINE0, WIPE = 0.15, 0.55, 1.8, 3.0, 3.45, 4.3, 7.8
+rng = np.random.default_rng(11)
 N = int(SR * DUR)
 t = np.arange(N) / SR
 L = np.zeros(N); R = np.zeros(N)
@@ -41,142 +39,127 @@ def note(name):
 
 def place(sig, at, gain=1.0, pan=0.0):
     sig = sig.copy()
-    tail = min(len(sig), int(0.3 * SR))                   # плавный хвост — без щелчка на обрыве
-    sig[-tail:] *= np.linspace(1, 0, tail) ** 2
-    i = int(at * SR); sig = sig[: max(0, N - i)]
+    tail = min(len(sig), int(0.05 * SR))
+    sig[-tail:] *= np.linspace(1, 0, tail)
+    i = int(at * SR)
+    if i >= N: return
+    sig = sig[: N - i]
     gl, gr = np.cos((pan + 1) * np.pi / 4), np.sin((pan + 1) * np.pi / 4)
     L[i:i + len(sig)] += sig * gain * gl * np.sqrt(2)
     R[i:i + len(sig)] += sig * gain * gr * np.sqrt(2)
 
 
-def saw(freq, d, detune=0.0, vib=0.0, vib_rate=5.0, phase=0.0):
-    x = tt(d)
-    f = freq * (1 + detune) * (1 + vib * np.sin(2 * np.pi * vib_rate * x + phase))
-    ph = np.cumsum(f) / SR + phase
-    return 2 * (ph % 1.0) - 1
+def pluck(freq, d=1.6, bright=0.5, decay=0.996):
+    """Струна домбры: Карплус — Стронг, щипок с «щелчком» ногтя и корпусной резонанс."""
+    n = int(d * SR)
+    p = int(SR / freq)
+    buf = rng.uniform(-1, 1, p) * 0.9
+    buf = lp(buf, 1500 + 5000 * bright, 1)
+    out = np.zeros(n)
+    # векторно по периодам: усреднение соседних отсчётов = простой фильтр потерь
+    for start in range(0, n, p):
+        seg = buf[: min(p, n - start)]
+        out[start:start + len(seg)] = seg
+        buf = decay * 0.5 * (buf + np.roll(buf, -1))
+    body = bp(out, 180, 2600) * 0.7 + out * 0.3                    # корпус
+    click = hp(rng.standard_normal(int(0.004 * SR)), 2500) * 0.25  # ноготь
+    body[: len(click)] += click
+    return body
 
 
-# ---------- Гул в ре ----------
-x = tt(DUR)
-drone = (np.sin(2 * np.pi * note("D2") * x) * 0.6 + np.sin(2 * np.pi * note("D1") * x) * 0.5
-         + lp(saw(note("D2"), DUR, 0.002) + saw(note("A2"), DUR, -0.002), 380) * 0.25)
-drone *= (0.88 + 0.12 * np.sin(2 * np.pi * 0.15 * x))
-place(drone * np.clip(x / 2.6, 0, 1) ** 1.5, 0.0, 0.32)
-
-# ---------- «Воздух» ----------
-x = tt(REVEAL + 0.05)
-swell = (x / (REVEAL + 0.05)) ** 3
-place(lp(bp(rng.standard_normal(len(x)), 400, 3000), 1800) * swell, 0.0, 0.08, pan=-0.4)
-place(lp(bp(rng.standard_normal(len(x)), 400, 3000), 1800) * swell, 0.0, 0.08, pan=0.4)
-
-# ---------- Дробь литавр: частые мягкие удары сливаются в гул, нарастает к удару ----------
-roll_start = REVEAL - 1.8
-x = tt(1.8)
-roll = np.zeros(len(x))
-k = 0.0
-while k < 1.8:
-    i = int(k * SR)
-    seg = tt(0.25)
-    f = note("D2") * (1 + 0.01 * rng.standard_normal())
-    hitw = (np.sin(2 * np.pi * f * seg) * 0.7 + lp(rng.standard_normal(len(seg)), 300) * 0.5) * np.exp(-seg * 18)
-    n = min(len(hitw), len(roll) - i)
-    roll[i:i + n] += hitw[:n] * (0.6 + 0.4 * rng.random())
-    k += 1 / 17 + 0.006 * rng.standard_normal()      # ~17 ударов в секунду, неровно — слышится как тремоло
-roll *= (x / 1.8) ** 2.2
-place(roll, roll_start, 0.35, pan=0.15)
-
-# ---------- 3.2 с: удар ----------
-x = tt(4.5)
-boom = np.sin(2 * np.pi * np.cumsum(36 + 24 * np.exp(-x * 5)) / SR) * np.exp(-x * 1.0)
-thump = lp(rng.standard_normal(len(x)), 200) * np.exp(-x * 8) * 0.9
-place(boom + thump, REVEAL, 0.8)
-place(lp(hp(rng.standard_normal(len(x)), 150), 1200) * np.exp(-x * 3.5) * 0.3, REVEAL, 0.3)
+def strum(notes, at, gain, pan=0.0, spread=0.012, bright=0.6, up=False):
+    """Удар по струнам: струны звучат с небольшим сдвигом, как при бое домбры."""
+    seq = notes[::-1] if up else notes
+    for k, n in enumerate(seq):
+        place(pluck(note(n), 1.4, bright), at + k * spread, gain, pan + (k - 0.5) * 0.15)
 
 
-# ---------- Аккорды: струнные + медь ----------
-def strings(notes, d, attack=0.8, cutoff=1500):
+# ---------- 0.15–1.8: перекличка двух голосов ----------
+# левый голос — фраза вниз, правый — ответ вверх; кварта ре–соль, как строй домбры
+phrase_l = [(0.00, "A3"), (0.16, "G3"), (0.32, "A3"), (0.48, "D3"), (0.72, "E3")]
+phrase_r = [(0.00, "D4"), (0.13, "C4"), (0.26, "D4"), (0.39, "G3"), (0.60, "A3"), (0.80, "D4")]
+for dt, n in phrase_l:
+    place(pluck(note(n), 1.2, 0.55), VOICE_L + dt, 0.32, pan=-0.6)
+for dt, n in phrase_r:
+    place(pluck(note(n), 1.2, 0.6), VOICE_R + 0.15 + dt, 0.32, pan=0.6)
+
+# лёгкий «воздух» нарастает к встрече
+x = tt(MEET)
+place(lp(bp(rng.standard_normal(len(x)), 600, 5000), 4000) * (x / MEET) ** 3, 0.0, 0.05, -0.3)
+place(lp(bp(rng.standard_normal(len(x)), 600, 5000), 4000) * (x / MEET) ** 3, 0.0, 0.05, 0.3)
+
+# ---------- 1.8: встреча ----------
+x = tt(2.5)
+sub = np.sin(2 * np.pi * np.cumsum(44 + 40 * np.exp(-x * 9)) / SR) * np.exp(-x * 1.6)
+place(sub + lp(rng.standard_normal(len(x)), 180) * np.exp(-x * 14) * 0.8, MEET, 0.75)
+strum(["D3", "G3", "D4"], MEET, 0.45, bright=0.85)
+place(np.sin(2 * np.pi * note("D6") * tt(1.5)) * np.exp(-tt(1.5) * 3.5), MEET + 0.08, 0.05, 0.1)   # «лист»
+
+# ---------- подложка: тёплый аккорд Dsus (без терции — открыто, по-степному) ----------
+def pad(notes, d, attack):
     x = tt(d)
     s = np.zeros(len(x))
     for k, n in enumerate(notes):
-        for j, det in enumerate((-0.004, 0.0, 0.004)):
-            s += saw(note(n), d, det, vib=0.0025, vib_rate=4.6 + 0.3 * j, phase=k * 0.7 + j)
-    s = lp(s, cutoff, 4) / (len(notes) * 3)
+        for det in (-0.003, 0.003):
+            ph = np.cumsum(np.full(len(x), note(n) * (1 + det))) / SR + k * 0.3
+            s += 2 * (ph % 1) - 1
+    s = lp(s, 900, 4) / (len(notes) * 2)
     return s * np.minimum(1, x / attack) ** 2
 
 
-def brass(notes, d, attack=0.25):
-    # медь: фильтр раскрывается на атаке — характерное «вау»
-    x = tt(d)
-    s = sum(saw(note(n), d, det) for n in notes for det in (-0.002, 0.002)) / (len(notes) * 2)
-    cut = 500 + 2600 * (1 - np.exp(-x / attack)) * np.exp(-x * 0.5)
-    return sweep_lp(s, cut) * np.minimum(1, x / 0.06)
+p = pad(["D2", "A2", "D3", "G3", "A3"], DUR - MEET, 1.2)
+p *= np.clip((WIPE + 0.4 - (MEET + tt(DUR - MEET))) / 0.6, 0, 1)
+place(p, MEET, 0.20, -0.2)
+place(p, MEET + 0.011, 0.20, 0.2)
 
+# ---------- 1.8–3.0: бой домбры нарастает (ритм «тақ-та-та») ----------
+k = 0
+tb = MEET + 0.25
+while tb < WORD0 - 0.05:
+    up = k % 3 == 2
+    g = 0.12 + 0.2 * (tb - MEET) / (WORD0 - MEET)
+    strum(["D3", "G3"], tb, g, pan=0.0, spread=0.008, bright=0.7, up=up)
+    tb += (0.16, 0.08, 0.08)[k % 3]
+    k += 1
 
-def sweep_lp(x, fc, blk=128):
-    y = np.zeros_like(x); zi = np.zeros((1, 2))
-    for i in range(0, len(x), blk):
-        sos = signal.butter(2, float(fc[i]), "low", fs=SR, output="sos")
-        y[i:i + blk], zi = signal.sosfilt(sos, x[i:i + blk], zi=zi)
-    return y
+# ---------- 3.45: слово ----------
+x = tt(2.0)
+place(np.sin(2 * np.pi * np.cumsum(50 + 30 * np.exp(-x * 10)) / SR) * np.exp(-x * 2.4), WORD0, 0.5)
+strum(["D3", "A3", "D4", "G4"], WORD0, 0.42, bright=0.9, spread=0.016)
 
+# ---------- 4.3–7.8: спокойный ритм под живой линией ----------
+k = 0
+tb = LINE0
+while tb < WIPE - 0.1:
+    up = k % 3 == 2
+    strum(["D3", "G3"], tb, 0.09 if not up else 0.06, spread=0.008, bright=0.5, up=up)
+    tb += (0.24, 0.12, 0.12)[k % 3]
+    k += 1
+for dt, n in [(0.6, "A4"), (1.5, "G4"), (2.4, "D4")]:             # отголоски «голосов»
+    place(pluck(note(n), 1.4, 0.4), LINE0 + dt, 0.12, pan=(-0.5 if dt < 1 else 0.5 if dt < 2 else 0))
 
-# Dsus2 на «1», затем ре мажор (add9) на «СТУДИЯ»
-d1 = WORD0 - REVEAL + 0.6
-sus = ["D2", "A2", "D3", "E3", "A3", "D4"]
-maj = ["D2", "A2", "D3", "F#3", "A3", "E4"]
-s1 = strings(sus, d1)
-s1 *= np.concatenate([np.ones(len(s1) - int(0.6 * SR)), np.linspace(1, 0, int(0.6 * SR))])
-place(s1, REVEAL, 0.8, pan=-0.3)
-place(s1, REVEAL + 200 / SR, 0.8, pan=0.3)
-b1 = brass(["D3", "A3", "E4"], d1) * np.exp(-tt(d1) * 0.6)
-b1 *= np.concatenate([np.ones(len(b1) - int(0.6 * SR)), np.linspace(1, 0, int(0.6 * SR))])
-place(b1, REVEAL, 0.22)
+# ---------- 7.8: шторка ----------
+x = tt(0.7)
+sw = bp(rng.standard_normal(len(x)), 800, 9000) * np.sin(np.pi * x / 0.7) ** 2
+place(sw, WIPE - 0.05, 0.12, -0.4)
+x = tt(1.0)
+place(np.sin(2 * np.pi * np.cumsum(48 + 30 * np.exp(-x * 10)) / SR) * np.exp(-x * 4), WIPE + 0.55, 0.45)
+strum(["D3", "G3", "D4"], WIPE + 0.55, 0.35, bright=0.8)
 
-d2 = DUR - WORD0
-s2 = strings(maj, d2, attack=0.6) * np.exp(-tt(d2) * 0.18)
-place(s2, WORD0, 0.85, pan=-0.3)
-place(s2, WORD0 + 200 / SR, 0.85, pan=0.3)
-b2 = brass(["D3", "F#3", "A3", "D4"], d2, attack=0.35) * np.exp(-tt(d2) * 0.45)
-place(b2, WORD0, 0.24)
-
-# ---------- 5.8 с: тихий высокий звон на блике ----------
-x = tt(3.0)
-for f, g, pan in ((note("A5"), 0.05, -0.2), (note("D6"), 0.04, 0.2)):
-    bell = (np.sin(2 * np.pi * f * x) + 0.3 * np.sin(2 * np.pi * f * 2.76 * x) * np.exp(-x * 3)) * np.exp(-x * 1.6)
-    place(bell * np.minimum(1, x / 0.01), SHINE + (0.12 if pan > 0 else 0), g, pan)
-
-# ---------- 0.9–3.2 с: восходящий перелив — вышка растёт ----------
-arp = ["D4", "A4", "D5", "E5", "F#5", "A5", "D6", "E6", "A6"]
-for k, n in enumerate(arp):
-    at = 0.9 + k * (2.2 / len(arp))
-    x = tt(1.6)
-    f = note(n)
-    cel = (np.sin(2 * np.pi * f * x) + 0.35 * np.sin(2 * np.pi * f * 4.0 * x) * np.exp(-x * 9)) * np.exp(-x * 3.2)
-    place(cel * np.minimum(1, x / 0.004), at, 0.035 + 0.025 * k / len(arp), pan=-0.5 + k / len(arp))
-
-# ---------- «сигнал эфира»: короткий чистый тон с отзвуком на каждой волне ----------
-for i, p0 in enumerate((REVEAL, REVEAL + 0.45, REVEAL + 0.9, 6.4)):
-    x = tt(1.2)
-    f = note("A5") if i < 3 else note("D6")
-    ping = np.sin(2 * np.pi * f * x) * np.exp(-x * 7) * np.minimum(1, x / 0.003)
-    g = (0.07, 0.05, 0.035, 0.035)[i]
-    place(ping, p0, g, pan=(-0.25, 0.25, 0.0, 0.0)[i])
-    place(ping, p0 + 0.18, g * 0.35, pan=(0.35, -0.35, 0.2, -0.2)[i])   # отзвук
-
-# ---------- Реверб, большой зал (3 с) ----------
-ir_t = tt(3.0)
-irL = lp(rng.standard_normal(len(ir_t)), 5000) * np.exp(-ir_t * 2.3)
-irR = lp(rng.standard_normal(len(ir_t)), 5000) * np.exp(-ir_t * 2.3)
+# ---------- небольшой зал ----------
+ir_t = tt(1.6)
+irL = lp(rng.standard_normal(len(ir_t)), 6000) * np.exp(-ir_t * 4.0)
+irR = lp(rng.standard_normal(len(ir_t)), 6000) * np.exp(-ir_t * 4.0)
 for ir in (irL, irR):
-    ir[: int(0.02 * SR)] = 0                                 # предзадержка 20 мс
-wetL = signal.fftconvolve(L, irL)[:N] / np.sqrt(np.sum(irL ** 2)) * 0.30
-wetR = signal.fftconvolve(R, irR)[:N] / np.sqrt(np.sum(irR ** 2)) * 0.30
+    ir[: int(0.015 * SR)] = 0
+wetL = signal.fftconvolve(L, irL)[:N] / np.sqrt(np.sum(irL ** 2)) * 0.18
+wetR = signal.fftconvolve(R, irR)[:N] / np.sqrt(np.sum(irR ** 2)) * 0.18
 L, R = L + wetL, R + wetR
 
-fade = np.clip((DUR - t) / 0.8, 0, 1) ** 2 * np.clip(t / 0.3, 0, 1)
-L, R = hp(L * fade, 25), hp(R * fade, 25)
+fade = np.clip((DUR - t) / 0.35, 0, 1) * np.clip(t / 0.05, 0, 1)
+L, R = hp(L * fade, 28), hp(R * fade, 28)
 peak = max(np.abs(L).max(), np.abs(R).max())
-L, R = np.tanh(L / peak * 1.1) / np.tanh(1.1) * 0.89, np.tanh(R / peak * 1.1) / np.tanh(1.1) * 0.89
+L, R = np.tanh(L / peak * 1.2) / np.tanh(1.2) * 0.89, np.tanh(R / peak * 1.2) / np.tanh(1.2) * 0.89
 
 out = Path(__file__).with_name("zvuk.wav")
 pcm = (np.stack([L, R], 1) * (2 ** 23 - 1)).astype("<i4").tobytes()

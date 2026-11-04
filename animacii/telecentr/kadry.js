@@ -1,7 +1,7 @@
 // Раскадровка: node kadry.js [файл.png] — сетка ключевых кадров
 const { chromium } = require("playwright");
 const path = require("path");
-const TIMES = [0.6, 1.6, 2.4, 3.3, 3.8, 4.8, 6.2, 8.0];
+const TIMES = [0.9, 1.6, 2.1, 2.7, 3.4, 3.9, 4.6, 6.5, 8.1, 8.4];
 (async () => {
   const b = await chromium.launch();
   const p = await b.newPage({ viewport: { width: 1920, height: 1080 } });
