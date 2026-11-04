@@ -2,9 +2,9 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<title>ТЕЛЕЦЕНТР — заставка «Два голоса»</title>
+<title>ТЕЛЕОРТАЛЫҚ / ТЕЛЕЦЕНТР — заставка «Вышка»</title>
 <style>
-  /* Светлая тёплая гамма, бирюзовый и жёлтый — цвета ERTIS, тёмные чернила для слова */
+  /* Светлая тёплая гамма, бирюзовый и жёлтый — цвета ERTIS, тёмные чернила для названий */
   html, body { margin: 0; background: #000; }
   #stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: #f3f0e9; }
   canvas { position: absolute; left: 0; top: 0; }
@@ -23,23 +23,24 @@
 // ---------- Тайминги (совпадают со звуком zvuk.py) ----------
 const VOICE_L = 0.2;    // левый голос входит в кадр
 const VOICE_R = 0.9;    // правый голос отвечает
-const MEET = 3.3;       // голоса встречаются в центре: вырастает узор, вспыхивает «лист»
-const HORNS = 4.5;      // узор дорисован
-const SETTLE0 = 4.5, SETTLE1 = 5.5;   // узор уходит наверх, уступая место слову
-const WORD0 = 4.95;     // буквы «ТЕЛЕЦЕНТР»
-const LINE0 = 5.8;      // живая линия голоса под словом
-const WIPE = 9.3;       // бирюзовая шторка — переход в студию
-const END = 10.1;
+const BASE = 3.0;       // голоса дошли до подножия вышки
+const APEX = 3.9;       // голоса поднялись ногами вышки и встретились на вершине: вспыхивает маяк
+const CROWN = 5.0;      // рога-сигнал над вершиной дорисованы
+const SETTLE0 = 5.0, SETTLE1 = 6.0;   // вышка уходит наверх, уступая место названиям
+const WORD0 = 5.4;      // ТЕЛЕОРТАЛЫҚ
+const LINE0 = 6.1;      // живая линия голоса между названиями
+const WORD_RU = 6.4;    // ТЕЛЕЦЕНТР
+const WIPE = 9.6;       // бирюзовая шторка — переход в студию
+const END = 10.4;
 
 const C = {
   paper: "#f3f0e9", ink: "#0f2830", tq: "#00a3b8", tqRGB: "0,163,184", yellow: "#fdd327",
 };
-const WORD = "ТЕЛЕЦЕНТР";
-const WORD_SIZE = 112;
-const TRACK = 0.06;          // разрядка, доля кегля
-const ORN_FINAL = 1.08;      // масштаб узора в финале
-const ORN_BIG = 1.7;        // масштаб узора в момент встречи
-const STROKE = 11;            // толщина линии узора при масштабе 1
+const WORD_KZ = "ТЕЛЕОРТАЛЫҚ", WORD_RU_TEXT = "ТЕЛЕЦЕНТР";
+const KZ_SIZE = 104, RU_SIZE = 50;
+const KZ_TRACK = 0.05, RU_TRACK = 0.42;   // разрядка, доля кегля
+const TOWER_FINAL = 0.72;    // масштаб вышки в финале
+const STROKE = 11;           // толщина линии при масштабе 1 — у голосов, вышки и рогов одна
 
 const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 const prog = (t, t0, t1) => clamp((t - t0) / (t1 - t0));
@@ -51,9 +52,18 @@ const eo4 = k => 1 - Math.pow(1 - k, 4);
 const eoBack = k => 1 + 2.2 * Math.pow(k - 1, 3) + 1.2 * Math.pow(k - 1, 2);
 const $ = id => document.getElementById(id);
 
-// ---------- Узор «қошқар мүйіз»: стебель и четыре завитка (локальные координаты) ----------
-// Центр узла — (0, KNOT). Верхние рога завиваются наружу и вниз, нижние — наружу и вверх.
-const KNOT = -25;
+// ---------- Вышка (локальные координаты: 0,0 — центр подножия, вверх — минус) ----------
+const T_H = 380;              // высота от подножия до вершины, где сходятся ноги
+const T_B = 150;              // полуширина подножия
+const MAST = 52;              // мачта над вершиной
+const hw = h => T_B * Math.pow(1 - h / T_H, 1.8);    // вогнутые ноги сходятся в точку
+const BARS = [0.2, 0.4, 0.58];                       // поперечины, доли высоты
+
+function withLens(s) {
+  const lens = [0];
+  for (let i = 1; i < s.pts.length; i++) lens.push(lens[i - 1] + Math.hypot(s.pts[i][0] - s.pts[i - 1][0], s.pts[i][1] - s.pts[i - 1][1]));
+  return { ...s, lens, len: lens[lens.length - 1] };
+}
 function spiral(cx, cy, r0, r1, sweep, dir, n = 90) {
   const pts = [], k = Math.log(r0 / r1);
   for (let i = 0; i <= n; i++) {
@@ -63,21 +73,28 @@ function spiral(cx, cy, r0, r1, sweep, dir, n = 90) {
   return pts;
 }
 const mirror = pts => pts.map(([x, y]) => [-x, y]);
-const ORN = (() => {
-  const up = spiral(84, -84, 84, 13, 2.45 * Math.PI, 1);      // верхний правый рог
-  const lo = spiral(40, 34, 40, 9, 2.3 * Math.PI, -1);      // нижний правый рог
-  return [
-    { pts: [[0, KNOT], [0, -84]], t0: 0, t1: 0.3 },
-    { pts: [[0, KNOT], [0, 34]], t0: 0, t1: 0.25 },
-    { pts: up, t0: 0.22, t1: 1 }, { pts: mirror(up), t0: 0.22, t1: 1 },
-    { pts: lo, t0: 0.18, t1: 0.85 }, { pts: mirror(lo), t0: 0.18, t1: 0.85 },
-  ].map(s => {
-    const lens = [0];
-    for (let i = 1; i < s.pts.length; i++) lens.push(lens[i - 1] + Math.hypot(s.pts[i][0] - s.pts[i - 1][0], s.pts[i][1] - s.pts[i - 1][1]));
-    return { ...s, lens, len: lens[lens.length - 1] };
-  });
-})();
-const ORN_TOP = -174, ORN_BOTTOM = 80;   // габарит узора
+
+// ноги: от подножия к вершине — продолжение голосов
+const LEGS = [-1, 1].map(s => {
+  const pts = [];
+  for (let i = 0; i <= 60; i++) { const h = T_H * i / 60; pts.push([s * hw(h), -h]); }
+  return withLens({ pts, w: STROKE });
+});
+const BAR_SEGS = BARS.map((f, i) => withLens({ pts: [[-hw(f * T_H), -f * T_H], [hw(f * T_H), -f * T_H]], w: STROKE * 0.72, f }));
+// раскосы крест-накрест между подножием и поперечинами — тоньше, чтобы читалась решётка
+const LEVELS = [0, ...BARS];
+const BRACES = LEVELS.slice(0, -1).flatMap((f0, i) => {
+  const f1 = LEVELS[i + 1], h0 = f0 * T_H, h1 = f1 * T_H;
+  return [[-1, 1], [1, -1]].map(([a, b]) => withLens({ pts: [[a * hw(h0), -h0], [b * hw(h1), -h1]], w: STROKE * 0.45, f: f1 }));
+});
+// корона: мачта и рога «қошқар мүйіз» — сигнал эфира
+const HORN = spiral(80, -T_H - MAST, 80, 13, 2.4 * Math.PI, 1);
+const CROWN_SEGS = [
+  withLens({ pts: [[0, -T_H], [0, -T_H - MAST]], w: STROKE, t0: 0, t1: 0.3 }),
+  withLens({ pts: HORN, w: STROKE, t0: 0.25, t1: 1 }),
+  withLens({ pts: mirror(HORN), w: STROKE, t0: 0.25, t1: 1 }),
+];
+const TOWER_TOP = -T_H - MAST - 80 - STROKE / 2;    // верх рогов
 
 function partial(ctx, s, k) {
   const target = s.len * k;
@@ -90,7 +107,7 @@ function partial(ctx, s, k) {
   }
 }
 
-// «Лист» — знак той же формы, что у логотипа ERTIS: два противоположных угла скруглены
+// «Лист» — знак той же формы, что у логотипа ERTIS
 function leaf(ctx, x, y, s) {
   const h = s / 2, r = s * 0.62;
   ctx.beginPath();
@@ -101,117 +118,139 @@ function leaf(ctx, x, y, s) {
   ctx.closePath();
 }
 
-// ---------- Раскладка финала ----------
+// ---------- Раскладка ----------
 const ctx = $("main").getContext("2d");
-const FONT = `700 ${WORD_SIZE}px "Inter Display"`;
+const FONT_KZ = `700 ${KZ_SIZE}px "Inter Display"`;
+const FONT_RU = `600 ${RU_SIZE}px "Inter Display"`;
 let M;
-function measure() {
-  ctx.font = FONT;
-  const letters = [...WORD].map(ch => { const m = ctx.measureText(ch); return { ch, adv: m.width, abl: m.actualBoundingBoxLeft, abr: m.actualBoundingBoxRight }; });
+function layoutWord(text, font, track) {
+  ctx.font = font;
+  const letters = [...text].map(ch => { const m = ctx.measureText(ch); return { ch, adv: m.width, abl: m.actualBoundingBoxLeft, abr: m.actualBoundingBoxRight }; });
   const capH = ctx.measureText("Н").actualBoundingBoxAscent;
-  const ornH = (ORN_BOTTOM - ORN_TOP) * ORN_FINAL;
-  const gap = capH * 0.85, lineGap = capH * 0.7, lineAmp = 20;
-  const total = ornH + gap + capH + lineGap + lineAmp;
-  const top = 540 - 10 - total / 2;
-  const track = TRACK * WORD_SIZE;
   const xs = []; let x = 0;
   letters.forEach((l, i) => { xs.push(x); x += l.adv + (i < letters.length - 1 ? track : 0); });
   const inkL = xs[0] - letters[0].abl, inkR = xs.at(-1) + letters.at(-1).abr;
   const shift = 960 - (inkL + inkR) / 2;
-  M = {
-    letters, capH, xs: xs.map(v => v + shift), left: inkL + shift, right: inkR + shift,
-    ornY: top - ORN_TOP * ORN_FINAL,                      // начало координат узора в финале
-    base: top + ornH + gap + capH,
-    lineY: top + ornH + gap + capH + lineGap + lineAmp / 2,
-  };
-  // в момент встречи узел стоит в центре кадра
-  M.ornYBig = 540 - KNOT * ORN_BIG;
-  M.voiceY = 540;
+  return { letters, capH, xs: xs.map(v => v + shift), left: inkL + shift, right: inkR + shift };
+}
+function measure() {
+  const kz = layoutWord(WORD_KZ, FONT_KZ, KZ_TRACK * KZ_SIZE);
+  const ru = layoutWord(WORD_RU_TEXT, FONT_RU, RU_TRACK * RU_SIZE);
+  const towerH = -TOWER_TOP * TOWER_FINAL;
+  const gap = kz.capH * 0.75, lineGap = kz.capH * 0.62, lineAmp = 20, ruGap = kz.capH * 0.55;
+  // хвост «Қ» уходит ниже строки — даём ему место до линии
+  const total = towerH + gap + kz.capH + lineGap + lineAmp + ruGap + ru.capH;
+  const top = 540 - total / 2;
+  M = { kz, ru };
+  M.towerY = top + towerH;                                   // подножие вышки в финале
+  M.kzBase = M.towerY + gap + kz.capH;
+  M.lineY = M.kzBase + lineGap + lineAmp / 2;
+  M.ruBase = M.lineY + lineAmp / 2 + ruGap + ru.capH;
+  // на старте вышка в масштабе 1, вершина с короной по центру кадра
+  M.towerYBig = 540 + (T_H + MAST + 80) / 2 + 30;
 }
 
-// ---------- Голоса: волна речи с неровной огибающей ----------
+// ---------- Голоса ----------
 function speech(x, t, seed) {
-  // «слоги»: огибающая из нескольких синусов, сама волна — частая
   const env = Math.max(0, Math.sin(x * 0.011 + seed) * 0.6 + Math.sin(x * 0.027 + seed * 2.3 + t * 2) * 0.5 + 0.25);
   return env * Math.sin(x * 0.12 - t * 13 + seed);
 }
+// преобразование «вышка → экран» в текущий момент
+function towerPose(t) {
+  const s = eio3(prog(t, SETTLE0, SETTLE1));
+  return { sc: lerp(1, TOWER_FINAL, s), y: lerp(M.towerYBig, M.towerY, s) };
+}
 function voice(t, side) {
   const t0 = side < 0 ? VOICE_L : VOICE_R;
-  const head = eio2(prog(t, t0, MEET));                       // голова линии: от края к центру
-  const tail = eio3(prog(t, MEET - 0.05, MEET + 0.55));       // после встречи хвост втягивается в узел
+  const head = eio2(prog(t, t0, BASE));
+  const tail = eio3(prog(t, APEX - 0.3, APEX + 0.5));        // когда ноги сошлись, голос втягивается в подножие
   if (head <= 0 || tail >= 1) return;
+  const P = towerPose(t);
+  const foot = 960 + side * T_B * P.sc;
   const xEdge = side < 0 ? -40 : 1960;
-  const hx = lerp(xEdge, 960, head), tx = lerp(xEdge, 960, tail);
+  const hx = lerp(xEdge, foot, head), tx = lerp(xEdge, foot, tail);
+  const swell = eio2(prog(t, t0, t0 + 1.6));
   ctx.save();
-  const swell = eio2(prog(t, t0, t0 + 1.6));                   // голос нарастает плавно, без рывка
   ctx.globalAlpha = eio2(prog(t, t0, t0 + 0.8));
-  ctx.strokeStyle = C.tq; ctx.lineWidth = 11; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.strokeStyle = C.tq; ctx.lineWidth = STROKE; ctx.lineCap = "round"; ctx.lineJoin = "round";
   ctx.beginPath();
   const n = 320;
   for (let i = 0; i <= n; i++) {
     const x = lerp(tx, hx, i / n);
-    const nearHead = clamp(Math.abs(hx - x) / 220);           // к голове волна затихает в точку
-    const nearCenter = clamp(Math.abs(960 - x) / 260);        // у центра — прямая, чтобы влиться в узел
-    const a = 58 * swell * speech(x * side, t, side < 0 ? 1.3 : 4.1) * nearHead * nearCenter * (1 - tail);
-    i ? ctx.lineTo(x, M.voiceY + a) : ctx.moveTo(x, M.voiceY + a);
+    const nearHead = clamp(Math.abs(hx - x) / 220);
+    const nearFoot = clamp(Math.abs(foot - x) / 200);         // у подножия — прямая, чтобы перейти в ногу
+    const a = 58 * swell * speech(x * side, t, side < 0 ? 1.3 : 4.1) * nearHead * nearFoot * (1 - tail);
+    i ? ctx.lineTo(x, P.y + a) : ctx.moveTo(x, P.y + a);
   }
   ctx.stroke();
   ctx.restore();
 }
 
-// ---------- Узор ----------
-function ornament(t) {
-  const g = prog(t, MEET, HORNS);
-  if (g <= 0) return;
-  const s = eio3(prog(t, SETTLE0, SETTLE1));
-  const sc = lerp(ORN_BIG, ORN_FINAL, s);
-  const oy = lerp(M.ornYBig, M.ornY, s);
+// ---------- Вышка ----------
+function tower(t) {
+  const climb = eio2(prog(t, BASE - 0.05, APEX));
+  if (climb <= 0) return;
+  const P = towerPose(t);
   ctx.save();
-  ctx.translate(960, oy); ctx.scale(sc, sc);
-  ctx.strokeStyle = C.tq; ctx.lineWidth = STROKE; ctx.lineCap = "round"; ctx.lineJoin = "round";
-  ORN.forEach(seg => {
-    const k = eio2(prog(g, seg.t0, seg.t1));
+  ctx.translate(960, P.y); ctx.scale(P.sc, P.sc);
+  ctx.strokeStyle = C.tq; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  LEGS.forEach(s => { ctx.lineWidth = s.w; ctx.beginPath(); partial(ctx, s, climb); ctx.stroke(); });
+  // раскосы и поперечины появляются, только когда ноги прошли их уровень
+  BRACES.forEach(s => {
+    const k = eio2(clamp((climb - s.f) / 0.3));
     if (k <= 0) return;
-    ctx.beginPath(); partial(ctx, seg, k); ctx.stroke();
+    ctx.lineWidth = s.w; ctx.beginPath(); partial(ctx, s, k); ctx.stroke();
   });
-  // жёлтый «лист» в узле
-  const l = prog(t, MEET + 0.08, MEET + 0.6);
+  BAR_SEGS.forEach(s => {
+    const k = eio2(clamp((climb - s.f) / 0.22));
+    if (k <= 0) return;
+    const [[x0, y], [x1]] = s.pts;
+    ctx.lineWidth = s.w;
+    // от ног к центру: половинки сходятся посередине
+    ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(lerp(x0, 0, k), y); ctx.moveTo(x1, y); ctx.lineTo(lerp(x1, 0, k), y); ctx.stroke();
+  });
+  const cr = prog(t, APEX, CROWN);
+  CROWN_SEGS.forEach(s => {
+    const k = eio2(prog(cr, s.t0, s.t1));
+    if (k <= 0) return;
+    ctx.lineWidth = s.w; ctx.beginPath(); partial(ctx, s, k); ctx.stroke();
+  });
+  // маяк: жёлтый «лист» там, где сошлись голоса
+  const l = prog(t, APEX - 0.04, APEX + 0.5);
   if (l > 0) {
-    const breathe = 1 + 0.04 * Math.sin((t - MEET) * 3.2) * prog(t, HORNS, HORNS + 1);
-    const sz = 40 * eoBack(l) * breathe;
+    const breathe = 1 + 0.05 * Math.sin((t - APEX) * 3.2) * prog(t, CROWN, CROWN + 1);
     ctx.fillStyle = C.yellow;
-    leaf(ctx, 0, KNOT, sz); ctx.fill();
+    leaf(ctx, 0, -T_H, 42 * eoBack(l) * breathe); ctx.fill();
   }
   ctx.restore();
 }
 
-// ---------- Слово: буквы выезжают снизу из-под линии основания ----------
-function word(t) {
-  if (t < WORD0) return;
+// ---------- Названия ----------
+function word(t, W, font, base, t0, color, stagger) {
+  if (t < t0) return;
   ctx.save();
-  ctx.beginPath(); ctx.rect(0, 0, 1920, M.base + M.capH * 0.32); ctx.clip();   // маска: хвост «Ц» виден, ниже — нет
-  ctx.font = FONT; ctx.fillStyle = C.ink;
-  M.letters.forEach((l, i) => {
-    const k = eo4(prog(t, WORD0 + i * 0.045, WORD0 + 0.75 + i * 0.045));
+  ctx.beginPath(); ctx.rect(0, 0, 1920, base + W.capH * 0.34); ctx.clip();   // маска: хвост «Қ» и «Ц» виден, ниже — нет
+  ctx.font = font; ctx.fillStyle = color;
+  W.letters.forEach((l, i) => {
+    const k = eo4(prog(t, t0 + i * stagger, t0 + 0.75 + i * stagger));
     if (k <= 0) return;
     ctx.globalAlpha = clamp(k * 1.6);
-    ctx.fillText(l.ch, M.xs[i], M.base + (1 - k) * M.capH * 1.4);
+    ctx.fillText(l.ch, W.xs[i], base + (1 - k) * W.capH * 1.4);
   });
   ctx.restore();
 }
 
-// Живая линия голоса под словом — «эфир идёт»
 function liveLine(t) {
   const k = eio3(prog(t, LINE0, LINE0 + 1.0));
   if (k <= 0) return;
-  const half = (M.right - M.left) / 2 * k;
+  const half = (M.kz.right - M.kz.left) / 2 * k;
   ctx.save();
   ctx.strokeStyle = C.tq; ctx.lineWidth = 9; ctx.lineCap = "round"; ctx.lineJoin = "round";
   ctx.beginPath();
-  const n = 240;
+  const n = 260;
   for (let i = 0; i <= n; i++) {
     const x = 960 - half + 2 * half * i / n;
-    const edge = Math.sin(Math.PI * i / n);                    // по краям — тише
+    const edge = Math.sin(Math.PI * i / n);
     const a = 13 * speech(x, t * 0.6, 2.2) * edge * edge;
     i ? ctx.lineTo(x, M.lineY + a) : ctx.moveTo(x, M.lineY + a);
   }
@@ -219,7 +258,7 @@ function liveLine(t) {
   ctx.restore();
 }
 
-// ---------- Фон: тёплая бумага, бирюзовый свет и огромный бледный узор ----------
+// ---------- Фон ----------
 const bg = $("bg").getContext("2d");
 function background(t) {
   bg.fillStyle = C.paper; bg.fillRect(0, 0, 1920, 1080);
@@ -229,18 +268,18 @@ function background(t) {
   const w = bg.createRadialGradient(960, 1250, 0, 960, 1250, 900);
   w.addColorStop(0, `rgba(${C.tqRGB},.10)`); w.addColorStop(1, `rgba(${C.tqRGB},0)`);
   bg.fillStyle = w; bg.fillRect(0, 0, 1920, 1080);
-  // бледный большой узор — проявляется после встречи и медленно растёт
-  const a = eio2(prog(t, MEET + 0.3, HORNS + 1)) * 0.035;
+  // бледные большие рога — эхо сигнала, проявляются после маяка
+  const a = eio2(prog(t, APEX + 0.4, CROWN + 1)) * 0.035;
   if (a > 0) {
     bg.save();
-    bg.translate(960, 560); bg.scale(5.2 + t * 0.06, 5.2 + t * 0.06);
-    bg.strokeStyle = `rgba(${C.tqRGB},${a})`; bg.lineWidth = 2.2; bg.lineCap = "round";
-    ORN.slice(2).forEach(seg => { bg.beginPath(); partial(bg, seg, 1); bg.stroke(); });   // только завитки, без стебля
+    bg.translate(960, 820); bg.scale(4.6 + t * 0.05, 4.6 + t * 0.05);
+    bg.strokeStyle = `rgba(${C.tqRGB},${a})`; bg.lineWidth = 2.4; bg.lineCap = "round";
+    CROWN_SEGS.slice(1).forEach(seg => { bg.beginPath(); partial(bg, seg, 1); bg.stroke(); });
     bg.restore();
   }
 }
 
-// ---------- Шторка: бирюзовая полоса с жёлтой кромкой ----------
+// ---------- Шторка ----------
 const wp = $("wipe").getContext("2d");
 function wipe(t) {
   wp.clearRect(0, 0, 1920, 1080);
@@ -253,7 +292,6 @@ function wipe(t) {
   wp.beginPath(); wp.moveTo(-800, 0); wp.lineTo(x, 0); wp.lineTo(x - skew, 1080); wp.lineTo(-800, 1080); wp.fill();
 }
 
-// ---------- Зерно бумаги ----------
 const pc = $("paper").getContext("2d");
 const pimg = pc.createImageData(960, 540);
 function paper(frame) {
@@ -272,23 +310,25 @@ window.render = function (t, fps = 25) {
   background(t);
   ctx.clearRect(0, 0, 1920, 1080);
   voice(t, -1); voice(t, 1);
-  ornament(t);
-  word(t);
+  tower(t);
+  word(t, M.kz, FONT_KZ, M.kzBase, WORD0, C.ink, 0.045);
   liveLine(t);
+  word(t, M.ru, FONT_RU, M.ruBase, WORD_RU, C.ink, 0.04);
   wipe(t);
   paper(Math.round(t * fps));
 };
 
 window.showGrid = function () {
   ctx.save(); ctx.strokeStyle = "rgba(255,0,80,.8)"; ctx.lineWidth = 1;
-  [[960, 0, 960, 1080], [0, 540, 1920, 540], [0, M.ornY + ORN_TOP * ORN_FINAL, 1920, M.ornY + ORN_TOP * ORN_FINAL],
-   [0, M.base - M.capH, 1920, M.base - M.capH], [0, M.base, 1920, M.base], [0, M.lineY, 1920, M.lineY],
-   [M.left, 0, M.left, 1080], [M.right, 0, M.right, 1080]]
+  [[960, 0, 960, 1080], [0, 540, 1920, 540], [0, M.towerY + TOWER_TOP * TOWER_FINAL, 1920, M.towerY + TOWER_TOP * TOWER_FINAL],
+   [0, M.towerY, 1920, M.towerY], [0, M.kzBase - M.kz.capH, 1920, M.kzBase - M.kz.capH], [0, M.kzBase, 1920, M.kzBase],
+   [0, M.lineY, 1920, M.lineY], [0, M.ruBase - M.ru.capH, 1920, M.ruBase - M.ru.capH], [0, M.ruBase, 1920, M.ruBase],
+   [M.kz.left, 0, M.kz.left, 1080], [M.kz.right, 0, M.kz.right, 1080]]
     .forEach(([a, b, x, y]) => { ctx.beginPath(); ctx.moveTo(a + .5, b + .5); ctx.lineTo(x + .5, y + .5); ctx.stroke(); });
   ctx.restore();
 };
 
-document.fonts.load(FONT).then(() => document.fonts.ready)
+document.fonts.load(FONT_KZ).then(() => document.fonts.load(FONT_RU)).then(() => document.fonts.ready)
   .then(() => { measure(); window.render(0); window.READY = true; });
 </script>
 </body>
