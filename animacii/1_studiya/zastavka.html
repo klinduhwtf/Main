@@ -42,14 +42,12 @@
   }
   #logo { position: absolute; left: 960px; top: 540px; width: 0; height: 0; }
   #ring { position: absolute; left: -260px; top: -260px; overflow: visible; }
+  /* Маска — внутренность кольца: «1» поднимается изнутри круга */
   #oneMask {
-    position: absolute; left: -200px; top: -260px; width: 400px; height: 520px; overflow: hidden;
+    position: absolute; left: -246px; top: -246px; width: 492px; height: 492px;
+    border-radius: 50%; overflow: hidden;
   }
-  #one {
-    position: absolute; left: 0; width: 400px; top: 0; height: 520px; line-height: 520px;
-    text-align: center; font-weight: 900; font-size: 470px; color: var(--accent);
-    letter-spacing: -0.04em;
-  }
+  #one { position: absolute; left: 0; top: 0; }
   #word {
     position: absolute; top: 0; left: 0; display: flex; white-space: nowrap;
   }
@@ -84,11 +82,11 @@
         <circle id="ringC" cx="260" cy="260" r="250" fill="none" stroke="rgba(244,241,234,.85)" stroke-width="4"/>
         <circle id="ringArc" cx="260" cy="260" r="250" fill="none" stroke="#e8402c" stroke-width="8" stroke-linecap="round"/>
       </svg>
-      <div id="oneMask"><div id="one">1</div></div>
+      <div id="oneMask"><canvas id="one" width="492" height="492"></canvas></div>
     </div>
     <div id="word"></div>
     <div id="rule"></div>
-    <div id="tag">Один гость&nbsp;&nbsp;·&nbsp;&nbsp;одна проблема</div>
+    <div id="tag">Подкаст</div>
   </div>
   <canvas id="grain" width="960" height="540" style="width:1920px;height:1080px"></canvas>
   <div id="vignette"></div>
@@ -119,7 +117,34 @@ const letters = [...WORD].map(ch => {
 // Раскладка финального логотипа: [кольцо с «1»] + [СТУДИЯ], по центру кадра
 const RING_R = 260, GAP = 70;
 let wordW, lockLeft, ringCX, wordX, tagW;
+// «1» рисуется на canvas и центрируется по реальным границам глифа:
+// по вертикали — по габаритам, по горизонтали — по «массе» знака (оптический центр).
+const ONE_SIZE = 330;   // кегль цифры; высота знака ≈ 0.73 кегля
+function drawOne() {
+  const c = $("one"), ctx = c.getContext("2d"), W = c.width, H = c.height;
+  const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+  ctx.font = `900 ${ONE_SIZE}px "Inter Display"`;
+  ctx.textBaseline = "alphabetic";
+  const m = ctx.measureText("1");
+  const bx = (m.actualBoundingBoxRight - m.actualBoundingBoxLeft) / 2; // центр габарита от точки начала
+  const by = (m.actualBoundingBoxDescent - m.actualBoundingBoxAscent) / 2;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = accent;
+  ctx.fillText("1", W / 2 - bx, H / 2 - by);
+  // Оптическая поправка: сдвигаем так, чтобы центр масс по X был ровно посередине
+  const d = ctx.getImageData(0, 0, W, H).data;
+  let sum = 0, sx = 0;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const a = d[(y * W + x) * 4 + 3]; sum += a; sx += a * x;
+  }
+  const dx = W / 2 - sx / sum;
+  const geomShift = dx * 0.5;  // половина пути между геометрическим и оптическим центром
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillText("1", W / 2 - bx + geomShift, H / 2 - by);
+}
+
 function layout() {
+  drawOne();
   wordW = wordEl.getBoundingClientRect().width;
   tagW = $("tag").getBoundingClientRect().width;
   const total = RING_R * 2 + GAP + wordW;
@@ -200,7 +225,7 @@ window.render = function (t, fps = 25) {
 
   // «1» поднимается из маски
   const o = eoBack(prog(t, 1.45, 2.35));
-  $("one").style.transform = `translateY(${lerp(540, 0, o)}px)`;
+  $("one").style.transform = `translateY(${lerp(500, 0, o)}px)`;
 
   // СТУДИЯ: буквы по очереди
   $("word").style.left = wordX + "px";
