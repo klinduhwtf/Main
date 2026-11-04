@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>1 СТУДИЯ — заставка, вариант 3</title>
+<style>
+  /* Цвета взяты с сайта ertistv.kz (логотип ERTIS): бирюзовый и жёлтый */
+  :root {
+    --cyan: #00b2ca;
+    --yellow: #fddb27;
+    --deep: #041820;
+    --deep2: #0a3240;
+    --text: #ffffff;
+  }
+  html, body { margin: 0; background: #000; }
+  #stage {
+    position: relative; width: 1920px; height: 1080px; overflow: hidden;
+    background: radial-gradient(ellipse 80% 70% at 50% 42%, var(--deep2) 0%, var(--deep) 75%);
+  }
+  #camera { position: absolute; inset: 0; transform-origin: 50% 50%; }
+  #light {
+    position: absolute; width: 1800px; height: 1100px; margin: -550px 0 0 -900px;
+    background: radial-gradient(ellipse at center, rgba(0,178,202,.30) 0%, rgba(0,178,202,.08) 40%, rgba(0,178,202,0) 70%);
+  }
+  #river { position: absolute; left: 0; top: 0; }
+  #logo { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+  #leaf {
+    position: absolute; left: -150px; top: -150px; width: 300px; height: 300px;
+    background: linear-gradient(145deg, #13c3d9 0%, var(--cyan) 55%, #0096ad 100%);
+    border-radius: 42% 7% 42% 7%;
+    box-shadow: 0 30px 80px rgba(0,0,0,.35);
+  }
+  #seed {
+    position: absolute; width: 84px; height: 84px; left: 54px; top: 54px;
+    background: var(--yellow); border-radius: 46% 8% 46% 8%;
+  }
+  #one { position: absolute; left: -150px; top: -150px; }
+  #wordMask { position: absolute; overflow: hidden; height: 220px; }
+  #word {
+    font: 800 168px/220px "Inter Display", "Inter", sans-serif; color: var(--text);
+    letter-spacing: 0.02em; white-space: nowrap;
+  }
+  #line { position: absolute; height: 3px; background: var(--cyan); transform-origin: 0 50%; }
+  #sweep { position: absolute; inset: 0; mix-blend-mode: soft-light; }
+  #grain { position: absolute; left: 0; top: 0; opacity: .045; mix-blend-mode: screen; }
+  #vignette {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 52%, rgba(0,0,0,.6) 100%);
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="camera">
+    <div id="light"></div>
+    <canvas id="river" width="1920" height="1080"></canvas>
+    <div id="logo">
+      <div id="leaf"></div>
+      <canvas id="one" width="300" height="300"></canvas>
+      <div id="seed"></div>
+    </div>
+    <div id="wordMask"><div id="word">СТУДИЯ</div></div>
+    <div id="line"></div>
+  </div>
+  <div id="sweep"></div>
+  <canvas id="grain" width="960" height="540" style="width:1920px;height:1080px"></canvas>
+  <div id="vignette"></div>
+</div>
+
+<script>
+const ONE_SIZE = 230;
+const LEAF = 300, GAP = 64;
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const prog = (t, t0, t1) => clamp((t - t0) / (t1 - t0));
+const lerp = (a, b, k) => a + (b - a) * k;
+const eio3 = k => k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const eio2 = k => k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+const eo3 = k => 1 - Math.pow(1 - k, 3);
+const eo4 = k => 1 - Math.pow(1 - k, 4);
+const $ = id => document.getElementById(id);
+
+let L;
+// «1» на canvas, центр по габаритам знака с половинной оптической поправкой
+function drawOne() {
+  const c = $("one"), ctx = c.getContext("2d"), W = c.width, H = c.height;
+  ctx.font = `800 ${ONE_SIZE}px "Inter Display"`;
+  const m = ctx.measureText("1");
+  const bx = (m.actualBoundingBoxRight - m.actualBoundingBoxLeft) / 2;
+  const by = (m.actualBoundingBoxDescent - m.actualBoundingBoxAscent) / 2;
+  ctx.fillStyle = "#fff";
+  ctx.fillText("1", W / 2 - bx, H / 2 - by);
+  const d = ctx.getImageData(0, 0, W, H).data;
+  let sum = 0, sx = 0;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const a = d[(y * W + x) * 4 + 3]; sum += a; sx += a * x; }
+  const shift = (W / 2 - sx / sum) * 0.5;
+  ctx.clearRect(0, 0, W, H);
+  ctx.shadowColor = "rgba(0,60,75,.35)"; ctx.shadowBlur = 18; ctx.shadowOffsetY = 6;
+  ctx.fillText("1", W / 2 - bx + shift, H / 2 - by);
+}
+function layout() {
+  drawOne();
+  const wordW = $("word").getBoundingClientRect().width;
+  const total = LEAF + GAP + wordW;
+  const x0 = 960 - total / 2;
+  L = { cx: x0 + LEAF / 2, wordX: x0 + LEAF + GAP, wordW };
+  // жёлтый «росток» в правом нижнем углу листа, как в логотипе ERTIS
+
+}
+
+// «Река»: медленные плавные линии (Ертіс — Иртыш)
+const rctx = $("river").getContext("2d");
+function river(t, alpha) {
+  rctx.clearRect(0, 0, 1920, 1080);
+  for (let i = 0; i < 16; i++) {
+    const k = i / 15;
+    const y0 = lerp(640, 1010, Math.pow(k, 1.4));
+    const amp = lerp(10, 34, k);
+    const sp = lerp(0.10, 0.22, k);
+    rctx.beginPath();
+    for (let x = -20; x <= 1940; x += 20) {
+      const y = y0 + Math.sin(x * 0.0035 * (1 + k * 0.5) + t * sp * 2 * Math.PI * 0.35 + i * 1.7) * amp
+                   + Math.sin(x * 0.0011 - t * 0.25 + i) * amp * 0.6;
+      x === -20 ? rctx.moveTo(x, y) : rctx.lineTo(x, y);
+    }
+    rctx.strokeStyle = `rgba(0,178,202,${alpha * lerp(0.10, 0.30, k)})`;
+    rctx.lineWidth = lerp(1, 2.2, k);
+    rctx.stroke();
+  }
+}
+
+const gctx = $("grain").getContext("2d");
+const gimg = gctx.createImageData(960, 540);
+function grain(frame) {
+  let s = ((frame + 11) * 2654435761) >>> 0;
+  const d = gimg.data;
+  for (let i = 0; i < d.length; i += 4) {
+    s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0;
+    d[i] = d[i + 1] = d[i + 2] = s & 255; d[i + 3] = 255;
+  }
+  gctx.putImageData(gimg, 0, 0);
+}
+
+// ---------- Тайминги (совпадают со звуком zvuk_v3.py) ----------
+const REVEAL = 2.4, WORD0 = 3.3, END = 8.0;
+
+window.DURATION = END;
+window.render = function (t, fps = 25) {
+  if (!L) layout();
+
+  // Камера: медленный наезд и лёгкий дрейф — без тряски
+  const z = lerp(1.06, 1.0, eio2(prog(t, 0, END)));
+  $("camera").style.transform = `translate(${Math.sin(t * 0.35) * 6}px, ${Math.cos(t * 0.3) * 4}px) scale(${z})`;
+
+  // Свет плывёт слева к логотипу
+  $("light").style.left = lerp(620, 960, eio2(prog(t, 0, 4))) + "px";
+  $("light").style.top = lerp(420, 520, eio2(prog(t, 0, 4))) + "px";
+  $("light").style.opacity = lerp(0.3, 1, eio2(prog(t, 0, 2.6)));
+
+  river(t, eio2(prog(t, 0, 2.0)) * lerp(1, 0.55, eio2(prog(t, 3, 5))));
+
+  // Лист с «1»: мягко проявляется, без удара
+  const r = eo4(prog(t, REVEAL, REVEAL + 1.2));
+  const lg = $("logo").style;
+  lg.left = L.cx + "px"; lg.top = "540px";
+  lg.opacity = r;
+  lg.transform = `scale(${lerp(0.9, 1, r)})`;
+  $("leaf").style.filter = `blur(${lerp(14, 0, r)}px)`;
+  const o = eo3(prog(t, REVEAL + 0.25, REVEAL + 1.25));
+  $("one").style.opacity = o;
+  $("one").style.transform = `translate(-10px, ${lerp(18, 0, o) - 10}px)`;
+  // жёлтый элемент появляется последним
+  const sd = eo3(prog(t, REVEAL + 0.7, REVEAL + 1.5));
+  $("seed").style.opacity = sd;
+  $("seed").style.transform = `translate(${lerp(-20, 0, sd)}px, ${lerp(-20, 0, sd)}px)`;
+  $("seed").style.left = (LEAF / 2 - 84) + "px";
+  $("seed").style.top = (LEAF / 2 - 84) + "px";
+
+  // СТУДИЯ: спокойное проявление шторкой слева направо
+  const wm = $("wordMask").style;
+  const w = eio3(prog(t, WORD0, WORD0 + 1.3));
+  wm.left = L.wordX + "px"; wm.top = (540 - 110) + "px";
+  wm.width = ((L.wordW + 12) * w) + "px";
+  wm.visibility = w > 0 ? "visible" : "hidden";
+  $("word").style.opacity = lerp(0.2, 1, w);
+  $("word").style.transform = `translateX(${lerp(-24, 0, eo3(prog(t, WORD0, WORD0 + 1.5)))}px)`;
+
+  // Тонкая бирюзовая линия под словом
+  const ln = eo3(prog(t, WORD0 + 0.9, WORD0 + 2.0));
+  const ls = $("line").style;
+  ls.left = (L.wordX + 6) + "px"; ls.top = (540 + 88) + "px"; ls.width = (L.wordW - 12) + "px";
+  ls.transform = `scaleX(${ln})`; ls.opacity = 0.9;
+
+  // Медленный световой проход по логотипу
+  const sw = prog(t, 5.2, 6.8);
+  const sx = lerp(-30, 130, eio2(sw));
+  $("sweep").style.background = sw > 0 && sw < 1
+    ? `linear-gradient(105deg, rgba(255,255,255,0) ${sx - 12}%, rgba(255,255,255,.55) ${sx}%, rgba(255,255,255,0) ${sx + 12}%)`
+    : "none";
+
+  // Уход в чёрный
+  $("stage").style.filter = `brightness(${1 - eio2(prog(t, END - 0.8, END))})`;
+  grain(Math.round(t * fps));
+};
+
+document.fonts.load(`800 ${ONE_SIZE}px "Inter Display"`).then(() => document.fonts.ready).then(() => {
+  layout(); window.render(0); window.READY = true;
+});
+</script>
+</body>
+</html>
