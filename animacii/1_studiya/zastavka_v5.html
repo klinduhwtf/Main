@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>1 СТУДИЯ — заставка, вариант 5</title>
+<style>
+  /* Анимация варианта 1 + синяя сцена варианта 4. Текст белый, акценты — бирюзовый ERTIS */
+  :root { --deep: #020a1e; --deep2: #0b3a7a; }
+  html, body { margin: 0; background: #000; }
+  #stage {
+    position: relative; width: 1920px; height: 1080px; overflow: hidden;
+    background:
+      radial-gradient(ellipse 60% 45% at 50% 48%, rgba(30,120,210,.45) 0%, rgba(30,120,210,0) 70%),
+      radial-gradient(ellipse 90% 75% at 50% 44%, var(--deep2) 0%, var(--deep) 80%);
+  }
+  #camera { position: absolute; inset: 0; transform-origin: 50% 50%; }
+  #floor, #c, #flare { position: absolute; left: 0; top: 0; }
+  #world { position: absolute; inset: 0; perspective: 1300px; perspective-origin: 50% 46%; }
+  #cam { position: absolute; left: 960px; top: 500px; transform-style: preserve-3d; }
+  .panel {
+    position: absolute; box-sizing: border-box;
+    border: 1.5px solid rgba(150,205,255,.4);
+    background: linear-gradient(135deg, rgba(70,160,255,.14), rgba(70,160,255,.03) 60%, rgba(255,255,255,.05));
+  }
+  .beam {
+    position: absolute; top: -260px; width: 460px; height: 1500px;
+    background: linear-gradient(180deg, rgba(175,215,255,.20), rgba(175,215,255,0) 72%);
+    filter: blur(40px); transform-origin: 50% 0;
+  }
+  #flare { mix-blend-mode: screen; }
+  #grain { position: absolute; left: 0; top: 0; opacity: .04; mix-blend-mode: screen; }
+  #vignette {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 50%, rgba(0,0,0,.65) 100%);
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="camera">
+    <canvas id="floor" width="1920" height="1080"></canvas>
+    <div class="beam" id="beam1" style="left:450px"></div>
+    <div class="beam" id="beam2" style="left:1010px"></div>
+    <div id="world"><div id="cam"></div></div>
+    <canvas id="c" width="1920" height="1080"></canvas>
+    <canvas id="flare" width="1920" height="1080"></canvas>
+  </div>
+  <canvas id="grain" width="960" height="540" style="width:1920px;height:1080px"></canvas>
+  <div id="vignette"></div>
+</div>
+
+<script>
+// ---------- Тайминги (совпадают со звуком zvuk_v5.py) ----------
+const MEET = 1.25;     // точки встречаются, вспышка
+const RING0 = 1.3;     // кольцо рисуется
+const ONE0 = 1.45;     // «1» поднимается
+const SHIFT0 = 2.6;    // логотип уходит влево
+const WORD0 = 2.95;    // буквы «СТУДИЯ»
+const RULE0 = 3.55;    // линия под словом
+const END = 7.0;
+
+// ---------- Типографика и сетка (все отступы — от высоты прописной слова) ----------
+const WORD = "СТУДИЯ";
+const WORD_SIZE = 176, WORD_WEIGHT = 800, WORD_TRACK = 0.02;
+const ONE_SIZE = 320, ONE_WEIGHT = 800;
+const RING_R = 250, RING_W = 4, ARC_W = 8;
+const GAP_RING_WORD = 0.62;    // кольцо → слово
+const RULE_H = 6;              // толщина линии
+const RULE_CLEAR = 0.22;       // зазор между хвостами «Д» и линией
+const OPTICAL_Y = -8;          // вся группа чуть выше геометрического центра
+
+const WHITE = "#ffffff", CYAN = "#00b2ca", CYAN_RGB = "0,178,202";
+
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const prog = (t, t0, t1) => clamp((t - t0) / (t1 - t0));
+const lerp = (a, b, k) => a + (b - a) * k;
+const eio2 = k => k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+const eio3 = k => k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const eo3 = k => 1 - Math.pow(1 - k, 3);
+const eo5 = k => 1 - Math.pow(1 - k, 5);
+const eoBack = k => { const c1 = 0.9, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+const $ = id => document.getElementById(id);
+
+// ---------- Фон: панели и пол ----------
+let seed = 7151;
+const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+const panels = [];
+for (let i = 0; i < 24; i++) {
+  const side = i % 2 ? 1 : -1;
+  const p = { x: side * lerp(300, 1500, rnd()), y: lerp(-520, 620, rnd()), z: lerp(-2600, -600, rnd()),
+    w: lerp(140, 520, rnd()), h: lerp(100, 600, rnd()), ry: side * lerp(10, 35, rnd()), drift: lerp(-25, 25, rnd()) };
+  const el = document.createElement("div"); el.className = "panel";
+  el.style.width = p.w + "px"; el.style.height = p.h + "px";
+  el.style.marginLeft = -p.w / 2 + "px"; el.style.marginTop = -p.h / 2 + "px";
+  el.style.filter = `blur(${lerp(2, 5, rnd()).toFixed(1)}px)`;
+  $("cam").appendChild(el); p.el = el; panels.push(p);
+}
+const fctx = $("floor").getContext("2d");
+function floor(t, a) {
+  fctx.clearRect(0, 0, 1920, 1080);
+  const hz = 640, vx = 960;
+  fctx.lineWidth = 1;
+  for (let i = -24; i <= 24; i++) {
+    const xb = vx + i * 140;
+    const g = fctx.createLinearGradient(0, hz, 0, 1080);
+    g.addColorStop(0, "rgba(90,170,255,0)"); g.addColorStop(1, `rgba(90,170,255,${0.18 * a})`);
+    fctx.strokeStyle = g;
+    fctx.beginPath(); fctx.moveTo(vx + i * 6, hz); fctx.lineTo(xb + (xb - vx) * 1.6, 1080); fctx.stroke();
+  }
+  const off = (t * 0.15) % 1;
+  for (let j = 0; j < 12; j++) {
+    const k = (j + off) / 12, y = hz + Math.pow(k, 2.4) * (1080 - hz);
+    fctx.strokeStyle = `rgba(90,170,255,${0.12 * a * k})`;
+    fctx.beginPath(); fctx.moveTo(0, y); fctx.lineTo(1920, y); fctx.stroke();
+  }
+}
+
+// ---------- Измерения и раскладка ----------
+const ctx = $("c").getContext("2d");
+const FONT_WORD = `${WORD_WEIGHT} ${WORD_SIZE}px "Inter Display"`;
+const FONT_ONE = `${ONE_WEIGHT} ${ONE_SIZE}px "Inter Display"`;
+let M;
+function measure() {
+  ctx.font = FONT_WORD;
+  const capH = ctx.measureText("Н").actualBoundingBoxAscent;
+  const track = WORD_TRACK * WORD_SIZE;
+  const letters = [...WORD].map(ch => {
+    const m = ctx.measureText(ch);
+    return { ch, adv: m.width, abl: m.actualBoundingBoxLeft, abr: m.actualBoundingBoxRight, desc: m.actualBoundingBoxDescent };
+  });
+  const desc = Math.max(...letters.map(l => l.desc));          // хвосты «Д»
+  let x = 0; const xs = [];
+  letters.forEach((l, i) => { xs.push(x); x += l.adv + (i < letters.length - 1 ? track : 0); });
+  const inkL = xs[0] - letters[0].abl, inkR = xs[xs.length - 1] + letters[letters.length - 1].abr;
+  const inkW = inkR - inkL;
+
+  // «1»: габарит + оптическая поправка по центру масс
+  ctx.font = FONT_ONE;
+  const m1 = ctx.measureText("1");
+  const one = { abl: m1.actualBoundingBoxLeft, w: m1.actualBoundingBoxLeft + m1.actualBoundingBoxRight, h: m1.actualBoundingBoxAscent };
+  const oc = document.createElement("canvas"); oc.width = oc.height = 600;
+  const o = oc.getContext("2d"); o.font = FONT_ONE;
+  o.fillText("1", 300 - one.w / 2 + one.abl, 300 + one.h / 2);
+  const d = o.getImageData(0, 0, 600, 600).data; let sum = 0, sx = 0;
+  for (let y = 0; y < 600; y++) for (let xx = 0; xx < 600; xx++) { const a = d[(y * 600 + xx) * 4 + 3]; sum += a; sx += a * xx; }
+  one.optical = -(sx / sum - 300) * 0.5;
+
+  // Горизонталь: [кольцо] — отступ — [слово по чернилам]
+  const ringVis = RING_R + ARC_W / 2;
+  const gap = capH * GAP_RING_WORD;
+  const total = ringVis * 2 + gap + inkW;
+  const left = 960 - total / 2;
+  const cy = 540 + OPTICAL_Y;
+  // Вертикаль текстового блока: [прописные] — зазор под хвостами — [линия]; блок по центру кольца
+  const ruleGap = desc + capH * RULE_CLEAR;
+  const blockH = capH + ruleGap + RULE_H;
+  const capTop = cy - blockH / 2;
+  M = {
+    capH, letters, xs, inkL, inkW, one, cy,
+    ringCX: left + ringVis,
+    wordInkLeft: left + ringVis * 2 + gap,
+    base: capTop + capH,
+    ruleY: capTop + capH + ruleGap,
+  };
+  M.wordShift = M.wordInkLeft - inkL;        // смещение начала строки
+}
+
+// ---------- Отрисовка ----------
+function drawRing(cx, cy, scale, t) {
+  const r = eio3(prog(t, RING0, RING0 + 1.1));
+  if (r <= 0) return;
+  const rot = -Math.PI / 2 + lerp(-2.1, 0, eo3(prog(t, RING0, RING0 + 1.3)));
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(scale, scale);
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "rgba(255,255,255,.9)"; ctx.lineWidth = RING_W;
+  ctx.beginPath(); ctx.arc(0, 0, RING_R, rot, rot + Math.PI * 2 * r); ctx.stroke();
+  // бирюзовая дуга медленно обходит кольцо
+  const a = prog(t, RING0 + 0.6, RING0 + 1.1);
+  if (a > 0) {
+    const st = -Math.PI / 2 + t * 2 * Math.PI * 0.12;
+    ctx.globalAlpha = a; ctx.strokeStyle = CYAN; ctx.lineWidth = ARC_W;
+    ctx.beginPath(); ctx.arc(0, 0, RING_R, st, st + Math.PI * 2 * 0.12); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawOne(cx, cy, scale, t) {
+  const k = eoBack(prog(t, ONE0, ONE0 + 0.9));
+  if (k <= 0) return;
+  const O = M.one;
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(scale, scale);
+  ctx.beginPath(); ctx.arc(0, 0, RING_R - RING_W, 0, Math.PI * 2); ctx.clip();   // «1» поднимается изнутри кольца
+  ctx.font = FONT_ONE; ctx.fillStyle = WHITE;
+  ctx.shadowColor = "rgba(0,20,60,.45)"; ctx.shadowBlur = 24; ctx.shadowOffsetY = 8;
+  ctx.fillText("1", O.abl - O.w / 2 + O.optical, O.h / 2 + lerp(RING_R * 2, 0, k));
+  ctx.restore();
+}
+
+function drawWord(t) {
+  ctx.save(); ctx.font = FONT_WORD; ctx.fillStyle = WHITE;
+  M.letters.forEach((l, i) => {
+    const k = eo5(prog(t, WORD0 + i * 0.07, WORD0 + 0.8 + i * 0.07));
+    if (k <= 0) return;
+    const x = M.wordShift + M.xs[i];
+    ctx.save();
+    // маска строки: буква «встаёт» от базовой линии; место под хвосты «Д» открывается по мере подъёма
+    ctx.beginPath(); ctx.rect(x - 20, M.base - M.capH - 20, l.adv + 40, M.capH + 20 + (l.desc + 4) * k); ctx.clip();
+    ctx.fillText(l.ch, x, M.base + lerp(M.capH * 1.6, 0, k));
+    ctx.restore();
+  });
+  ctx.restore();
+}
+
+function drawRule(t) {
+  const k = eo3(prog(t, RULE0, RULE0 + 0.7));
+  if (k <= 0) return;
+  ctx.fillStyle = CYAN;
+  ctx.fillRect(Math.round(M.wordInkLeft), Math.round(M.ruleY), Math.round(M.inkW * k), RULE_H);
+}
+
+// Точки «ведущий» и «гость» и линия между ними
+function drawDots(t) {
+  if (t >= MEET + 0.7) return;
+  const m = eio3(prog(t, 0.05, MEET));
+  const y = M.cy;
+  const xL = lerp(-40, 960, m), xR = lerp(1960, 960, m);
+  const fade = 1 - prog(t, MEET, MEET + 0.65);
+  const tail = 560 * (1 - eo3(prog(t, MEET, MEET + 0.65)));
+  const l = t < MEET ? lerp(0, xL, eo3(prog(t, 0.3, MEET))) : 960 - tail;
+  const r = t < MEET ? lerp(1920, xR, eo3(prog(t, 0.3, MEET))) : 960 + tail;
+  const g = ctx.createLinearGradient(l, 0, r, 0);
+  g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(0.3, "rgba(255,255,255,.9)");
+  g.addColorStop(0.7, `rgba(${CYAN_RGB},.9)`); g.addColorStop(1, `rgba(${CYAN_RGB},0)`);
+  ctx.save(); ctx.globalAlpha = 0.8 * fade; ctx.fillStyle = g;
+  ctx.fillRect(l, y - 1, Math.max(0, r - l), 2); ctx.restore();
+  if (t < MEET + 0.04) {
+    [[xL, "255,255,255"], [xR, CYAN_RGB]].forEach(([x, c]) => {
+      const gl = ctx.createRadialGradient(x, y, 0, x, y, 34);
+      gl.addColorStop(0, `rgba(${c},.9)`); gl.addColorStop(1, `rgba(${c},0)`);
+      ctx.fillStyle = gl; ctx.fillRect(x - 34, y - 34, 68, 68);
+      ctx.fillStyle = `rgb(${c})`; ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.fill();
+    });
+  }
+}
+
+const fl = $("flare").getContext("2d");
+function flash(t) {
+  fl.clearRect(0, 0, 1920, 1080);
+  const a = prog(t, MEET - 0.05, MEET + 0.05) * (1 - eo3(prog(t, MEET + 0.05, MEET + 0.9)));
+  if (a <= 0) return;
+  const y = M.cy, s = lerp(0.3, 1.1, eo3(prog(t, MEET - 0.05, MEET + 0.9)));
+  const g = fl.createRadialGradient(960, y, 0, 960, y, 700 * s);
+  g.addColorStop(0, `rgba(235,245,255,${0.9 * a})`); g.addColorStop(0.18, `rgba(120,190,255,${0.35 * a})`);
+  g.addColorStop(1, "rgba(70,160,255,0)");
+  fl.fillStyle = g; fl.fillRect(0, 0, 1920, 1080);
+  // горизонтальный анаморфный блик
+  fl.save(); fl.translate(960, y); fl.scale(1, 0.03);
+  const h = fl.createRadialGradient(0, 0, 0, 0, 0, 1000);
+  h.addColorStop(0, `rgba(200,230,255,${0.6 * a})`); h.addColorStop(1, "rgba(70,160,255,0)");
+  fl.fillStyle = h; fl.fillRect(-1000, -1000, 2000, 2000); fl.restore();
+}
+
+const gctx = $("grain").getContext("2d");
+const gimg = gctx.createImageData(960, 540);
+function grain(frame) {
+  let s = ((frame + 3) * 2654435761) >>> 0;
+  const d = gimg.data;
+  for (let i = 0; i < d.length; i += 4) {
+    s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0;
+    d[i] = d[i + 1] = d[i + 2] = s & 255; d[i + 3] = 255;
+  }
+  gctx.putImageData(gimg, 0, 0);
+}
+
+window.DURATION = END;
+window.render = function (t, fps = 25) {
+  if (!M) measure();
+  $("camera").style.transform = `scale(${lerp(1.0, 1.04, eio2(prog(t, 0, END)))})`;
+
+  // фон
+  const camZ = t * 60;
+  $("cam").style.transform = `rotateY(${Math.sin(t * 0.3) * 1.5}deg) translate3d(0, 0, ${camZ}px)`;
+  const dim = lerp(1, 0.45, eo3(prog(t, MEET, MEET + 1.5)));
+  panels.forEach(p => {
+    p.el.style.opacity = (dim * clamp((p.z + camZ + 2900) / 900)).toFixed(3);
+    p.el.style.transform = `translate3d(${p.x + p.drift * t}px, ${p.y}px, ${p.z}px) rotateY(${p.ry}deg)`;
+  });
+  floor(t, eio2(prog(t, 0, 1.2)) * lerp(1, 0.7, eo3(prog(t, MEET, MEET + 2))));
+  const b = eo3(prog(t, 0.2, 2.0));
+  $("beam1").style.opacity = b * 0.8; $("beam2").style.opacity = b * 0.8;
+  $("beam1").style.transform = `rotate(${lerp(14, 8, b) + Math.sin(t * 0.6) * 1.2}deg)`;
+  $("beam2").style.transform = `rotate(${lerp(-14, -8, b) - Math.sin(t * 0.5) * 1.2}deg)`;
+
+  // логотип
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, 1920, 1080);
+  drawDots(t);
+  const sh = eio3(prog(t, SHIFT0, SHIFT0 + 0.8));
+  const cx = lerp(960, M.ringCX, sh);
+  const sc = lerp(1.1, 1.0, eo3(prog(t, RING0, RING0 + 1.3)));
+  drawRing(cx, M.cy, sc, t);
+  drawOne(cx, M.cy, sc, t);
+  drawWord(t);
+  drawRule(t);
+  flash(t);
+
+  $("stage").style.filter = `brightness(${(1 - eio2(prog(t, END - 0.5, END))) * eio2(prog(t, 0, 0.4))})`;
+  grain(Math.round(t * fps));
+};
+
+// Отладка: render(6); showGrid()
+window.showGrid = function () {
+  ctx.save(); ctx.strokeStyle = "rgba(255,0,80,.85)"; ctx.lineWidth = 1;
+  const L = (a, b, c, d) => { ctx.beginPath(); ctx.moveTo(a + .5, b + .5); ctx.lineTo(c + .5, d + .5); ctx.stroke(); };
+  L(960, 0, 960, 1080); L(0, M.cy, 1920, M.cy);
+  L(M.ringCX - RING_R - ARC_W / 2, 0, M.ringCX - RING_R - ARC_W / 2, 1080);
+  L(M.wordInkLeft, 0, M.wordInkLeft, 1080); L(M.wordInkLeft + M.inkW, 0, M.wordInkLeft + M.inkW, 1080);
+  L(0, M.base - M.capH, 1920, M.base - M.capH); L(0, M.base, 1920, M.base); L(0, M.ruleY + RULE_H, 1920, M.ruleY + RULE_H);
+  ctx.restore();
+};
+
+document.fonts.load(FONT_WORD).then(() => document.fonts.load(FONT_ONE)).then(() => document.fonts.ready)
+  .then(() => { measure(); window.render(0); window.READY = true; });
+</script>
+</body>
+</html>
