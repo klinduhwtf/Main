@@ -4,41 +4,38 @@
 <meta charset="utf-8">
 <title>1 СТУДИЯ — заставка, вариант 4</title>
 <style>
-  /* Палитра ERTIS: бирюзовый и жёлтый — на глубоком тёмном фоне */
+  /* Синяя гамма (как в нынешнем оформлении передачи), акцентные линии — бирюзовый ERTIS */
   :root {
-    --cyan: #00b2ca;
-    --cyan-hi: #7fe6f2;
-    --yellow: #fddb27;
-    --deep: #020d13;
-    --deep2: #06303d;
+    --deep: #020a1e;
+    --deep2: #0b3a7a;
   }
   html, body { margin: 0; background: #000; }
   #stage {
     position: relative; width: 1920px; height: 1080px; overflow: hidden;
-    background: radial-gradient(ellipse 85% 70% at 50% 40%, var(--deep2) 0%, var(--deep) 78%);
+    background:
+      radial-gradient(ellipse 60% 45% at 50% 46%, rgba(30,120,210,.45) 0%, rgba(30,120,210,0) 70%),
+      radial-gradient(ellipse 90% 75% at 50% 42%, var(--deep2) 0%, var(--deep) 80%);
   }
   #floor { position: absolute; left: 0; top: 0; }
-  #world {
-    position: absolute; inset: 0; perspective: 1300px; perspective-origin: 50% 46%;
-  }
+  #world { position: absolute; inset: 0; perspective: 1300px; perspective-origin: 50% 46%; }
   #cam { position: absolute; left: 960px; top: 500px; transform-style: preserve-3d; }
   .panel {
     position: absolute; transform-style: preserve-3d; box-sizing: border-box;
-    border: 1.5px solid rgba(127,230,242,.45);
-    background: linear-gradient(135deg, rgba(0,178,202,.16), rgba(0,178,202,.03) 60%, rgba(255,255,255,.06));
-    box-shadow: inset 0 0 40px rgba(0,178,202,.08);
+    border: 1.5px solid rgba(150,205,255,.45);
+    background: linear-gradient(135deg, rgba(70,160,255,.16), rgba(70,160,255,.03) 60%, rgba(255,255,255,.06));
+    box-shadow: inset 0 0 40px rgba(70,160,255,.08);
   }
   #beam {
     position: absolute; left: 960px; top: -300px; width: 900px; height: 1500px; margin-left: -450px;
-    background: radial-gradient(ellipse 30% 60% at 50% 0%, rgba(160,240,255,.22), rgba(160,240,255,0) 70%);
+    background: radial-gradient(ellipse 30% 60% at 50% 0%, rgba(175,215,255,.24), rgba(175,215,255,0) 70%);
     filter: blur(20px);
   }
-  #logo { position: absolute; left: 0; top: 0; }
-  #flare { position: absolute; left: 0; top: 0; mix-blend-mode: screen; }
+  #logo, #flare { position: absolute; left: 0; top: 0; }
+  #flare { mix-blend-mode: screen; }
   #grain { position: absolute; left: 0; top: 0; opacity: .04; mix-blend-mode: screen; }
   #vignette {
     position: absolute; inset: 0;
-    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 50%, rgba(0,0,0,.7) 100%);
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 50%, rgba(0,0,0,.65) 100%);
   }
 </style>
 </head>
@@ -60,9 +57,23 @@ const WORD0 = 4.4;    // появляется «СТУДИЯ»
 const SHINE = 5.8;    // блик по логотипу
 const END = 9.0;
 
+// ---------- Типографика и сетка ----------
+// Все отступы считаются от размеров знаков, композиция центрируется по реальным границам.
 const WORD = "СТУДИЯ";
-const ONE_SIZE = 440, WORD_SIZE = 92, TRACK_FINAL = 0.42;
-const ONE_CY = 440, WORD_Y = 742;
+const ONE_SIZE = 420;           // кегль «1»
+const WORD_SIZE = 84;           // кегль «СТУДИЯ»
+const TRACK = 0.40;             // разрядка в финале, доля кегля
+const GAP_1_WORD = 1.1;         // отступ «1» → «СТУДИЯ», в высотах прописной буквы слова
+const RULE_GAP = 1.0;           // отступ линии от слова, в высотах прописной
+const RULE_LEN = 2.6;           // длина линии, в высотах прописной
+const OPTICAL_Y = -12;          // группа чуть выше геометрического центра — так она выглядит по центру
+const DEPTH = 22;               // глубина объёма «1», px
+
+const COL = {
+  face0: "#ffffff", face1: "#e8f3ff", face2: "#a9d4ff",
+  sideNear: [24, 112, 210], sideFar: [6, 34, 84],
+  rule: "0,178,202",
+};
 
 const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 const prog = (t, t0, t1) => clamp((t - t0) / (t1 - t0));
@@ -73,7 +84,7 @@ const eo3 = k => 1 - Math.pow(1 - k, 3);
 const eo4 = k => 1 - Math.pow(1 - k, 4);
 const $ = id => document.getElementById(id);
 
-// ---------- Стеклянные панели в 3D (детерминированно) ----------
+// ---------- Стеклянные панели в 3D ----------
 let seed = 20261104;
 const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
 const panels = [];
@@ -90,7 +101,7 @@ for (let i = 0; i < 30; i++) {
   $("cam").appendChild(el); p.el = el; panels.push(p);
 }
 
-// ---------- Пол: перспективная сетка ----------
+// ---------- Пол ----------
 const fctx = $("floor").getContext("2d");
 function floor(t, a) {
   fctx.clearRect(0, 0, 1920, 1080);
@@ -99,127 +110,160 @@ function floor(t, a) {
   for (let i = -24; i <= 24; i++) {
     const xb = vx + i * 140;
     const g = fctx.createLinearGradient(0, hz, 0, 1080);
-    g.addColorStop(0, "rgba(0,178,202,0)"); g.addColorStop(1, `rgba(0,178,202,${0.22 * a})`);
+    g.addColorStop(0, "rgba(90,170,255,0)"); g.addColorStop(1, `rgba(90,170,255,${0.2 * a})`);
     fctx.strokeStyle = g;
     fctx.beginPath(); fctx.moveTo(vx + i * 6, hz); fctx.lineTo(xb + (xb - vx) * 1.6, 1080); fctx.stroke();
   }
-  const off = (t * 0.22) % 1;   // медленное движение «вперёд»
+  const off = (t * 0.22) % 1;
   for (let j = 0; j < 14; j++) {
     const k = (j + off) / 14;
     const y = hz + Math.pow(k, 2.4) * (1080 - hz);
-    fctx.strokeStyle = `rgba(0,178,202,${0.16 * a * k})`;
+    fctx.strokeStyle = `rgba(90,170,255,${0.14 * a * k})`;
     fctx.beginPath(); fctx.moveTo(0, y); fctx.lineTo(1920, y); fctx.stroke();
   }
 }
 
-// ---------- Логотип ----------
+// ---------- Измерения и раскладка ----------
 const lctx = $("logo").getContext("2d");
+const FONT_ONE = `700 ${ONE_SIZE}px "Inter Display"`;
+const FONT_WORD = `600 ${WORD_SIZE}px "Inter Display"`;
 let M;
+
 function measure() {
-  lctx.font = `700 ${ONE_SIZE}px "Inter Display"`;
+  lctx.font = FONT_ONE;
   const m = lctx.measureText("1");
-  M = {
-    oneW: m.actualBoundingBoxRight + m.actualBoundingBoxLeft,
-    oneH: m.actualBoundingBoxAscent,
-    oneAbl: m.actualBoundingBoxLeft,
+  const one = {
+    abl: m.actualBoundingBoxLeft, abr: m.actualBoundingBoxRight, h: m.actualBoundingBoxAscent,
   };
-  lctx.font = `600 ${WORD_SIZE}px "Inter Display"`;
-  M.lw = [...WORD].map(ch => lctx.measureText(ch).width);
-  M.capH = lctx.measureText("С").actualBoundingBoxAscent;
+  one.w = one.abl + one.abr;
+  // Оптический центр «1»: у знака «флажок» слева, основная масса — штамб справа.
+  // Сдвигаем знак на половину разницы между центром габарита и центром масс.
+  const oc = document.createElement("canvas"); oc.width = 600; oc.height = 600;
+  const o = oc.getContext("2d"); o.font = FONT_ONE; o.fillStyle = "#000";
+  o.fillText("1", 300 - one.w / 2 + one.abl, 300 + one.h / 2);
+  const d = o.getImageData(0, 0, 600, 600).data;
+  let sum = 0, sx = 0;
+  for (let y = 0; y < 600; y++) for (let x = 0; x < 600; x++) { const a = d[(y * 600 + x) * 4 + 3]; sum += a; sx += a * x; }
+  one.optical = -(sx / sum - 300) * 0.7;
+
+  lctx.font = FONT_WORD;
+  const letters = [...WORD].map(ch => {
+    const mm = lctx.measureText(ch);
+    return { ch, adv: mm.width, abl: mm.actualBoundingBoxLeft, abr: mm.actualBoundingBoxRight };
+  });
+  const capH = lctx.measureText("Н").actualBoundingBoxAscent;
+
+  // Вертикаль: [верх «1»] — отступ — [высота прописных слова]; хвосты «Д» в расчёт не входят
+  const gap = capH * GAP_1_WORD;
+  const total = one.h + gap + capH;
+  const top = 540 + OPTICAL_Y - total / 2;
+  M = {
+    one, letters, capH,
+    oneTop: top, oneBase: top + one.h,
+    wordBase: top + one.h + gap + capH,
+  };
 }
 
-// «1»: лицевая грань — светлое стекло, боковая — глубокий бирюзовый (объём без фаски)
-function drawOne(t, alpha, scale, ang, depth) {
-  const ctx = lctx;
+// Раскладка слова при текущей разрядке: центрируется по чернилам первой и последней буквы
+function wordLayout(track) {
+  const L = M.letters;
+  const xs = []; let x = 0;
+  L.forEach((l, i) => { xs.push(x); x += l.adv + (i < L.length - 1 ? track : 0); });
+  const inkL = xs[0] - L[0].abl;
+  const inkR = xs[L.length - 1] + L[L.length - 1].abr;
+  const shift = 960 - (inkL + inkR) / 2;
+  return { xs: xs.map(v => v + shift), left: inkL + shift, right: inkR + shift };
+}
+
+// ---------- «1» с объёмом ----------
+function drawOne(alpha, scale, ang, depth) {
+  const ctx = lctx, O = M.one;
+  const cy = M.oneTop + O.h / 2;
+  const dx = Math.cos(ang), dy = Math.sin(ang);
+  // объём смещает визуальную массу вправо-вниз — компенсируем половину
+  const cxShift = O.optical - dx * depth * 0.5;
+  const cyShift = -dy * depth * 0.5;
   ctx.save();
   ctx.globalAlpha = alpha;
-  ctx.translate(960, ONE_CY); ctx.scale(scale, scale);
-  ctx.font = `700 ${ONE_SIZE}px "Inter Display"`;
-  const x0 = M.oneAbl - M.oneW / 2, y0 = M.oneH / 2;
-  const dx = Math.cos(ang), dy = Math.sin(ang);
+  ctx.translate(960 + cxShift, cy + cyShift);
+  ctx.scale(scale, scale);
+  ctx.font = FONT_ONE;
+  const x0 = O.abl - O.w / 2, y0 = O.h / 2;
   for (let i = Math.round(depth); i >= 1; i--) {
     const k = i / Math.max(1, depth);
-    ctx.fillStyle = `rgb(${Math.round(lerp(10, 2, k))},${Math.round(lerp(150, 58, k))},${Math.round(lerp(172, 72, k))})`;
+    const c = COL.sideNear.map((v, j) => Math.round(lerp(v, COL.sideFar[j], k)));
+    ctx.fillStyle = `rgb(${c})`;
     ctx.fillText("1", x0 + dx * i, y0 + dy * i);
   }
-  const g = ctx.createLinearGradient(0, -M.oneH / 2, 0, M.oneH / 2);
-  g.addColorStop(0, "#ffffff"); g.addColorStop(0.55, "#e6fbfe"); g.addColorStop(1, "#9fe7f1");
+  const g = ctx.createLinearGradient(0, -O.h / 2, 0, O.h / 2);
+  g.addColorStop(0, COL.face0); g.addColorStop(0.55, COL.face1); g.addColorStop(1, COL.face2);
   ctx.fillStyle = g;
   ctx.fillText("1", x0, y0);
-  ctx.lineWidth = 1.5; ctx.strokeStyle = "rgba(255,255,255,.7)";
+  ctx.lineWidth = 1.2; ctx.strokeStyle = "rgba(255,255,255,.65)";
   ctx.strokeText("1", x0, y0);
   ctx.restore();
 }
 
 function drawWord(t) {
-  const ctx = lctx;
   const w = eo4(prog(t, WORD0, WORD0 + 1.6));
   if (w <= 0) return null;
-  const track = lerp(1.1, TRACK_FINAL, w) * WORD_SIZE;
-  const total = M.lw.reduce((a, b) => a + b, 0) + track * (M.lw.length - 1);
-  let x = 960 - total / 2;
+  const lay = wordLayout(lerp(1.1, TRACK, w) * WORD_SIZE);
+  const ctx = lctx;
   ctx.save();
-  ctx.font = `600 ${WORD_SIZE}px "Inter Display"`;
-  ctx.fillStyle = "#ffffff";
-  [...WORD].forEach((ch, k) => {
+  ctx.font = FONT_WORD; ctx.fillStyle = "#ffffff";
+  M.letters.forEach((l, k) => {
     const lk = eo3(prog(t, WORD0 + k * 0.07, WORD0 + 0.9 + k * 0.07));
     ctx.globalAlpha = lk;
-    ctx.fillText(ch, x, WORD_Y + lerp(10, 0, lk));
-    x += M.lw[k] + track;
+    ctx.fillText(l.ch, lay.xs[k], M.wordBase);
   });
   ctx.restore();
-  return { left: 960 - total / 2, right: 960 + total / 2 - 0 };
+  return lay;
 }
 
-function drawRules(t, word) {
+// Боковые линии — от финальных границ слова, строго по середине высоты прописных
+function drawRules(t) {
+  const r = eio3(prog(t, WORD0 + 0.6, WORD0 + 2.0));
+  if (r <= 0) return;
+  const fin = wordLayout(TRACK * WORD_SIZE);
   const ctx = lctx;
-  const r = eio3(prog(t, WORD0 + 0.5, WORD0 + 1.9));
-  if (r <= 0 || !word) return;
-  const y = WORD_Y - M.capH / 2;
-  const len = 210 * r, gap = 56;
+  const y = Math.round(M.wordBase - M.capH / 2) + 0.5;   // ровно на пиксельную сетку
+  const gap = M.capH * RULE_GAP, len = M.capH * RULE_LEN * r;
   ctx.save();
-  ctx.lineWidth = 2;
-  const gl = ctx.createLinearGradient(word.left - gap - 210, 0, word.left - gap, 0);
-  gl.addColorStop(0, "rgba(0,178,202,0)"); gl.addColorStop(1, "rgba(0,178,202,.95)");
-  ctx.strokeStyle = gl;
-  ctx.beginPath(); ctx.moveTo(word.left - gap, y); ctx.lineTo(word.left - gap - len, y); ctx.stroke();
-  const gr = ctx.createLinearGradient(word.right + gap, 0, word.right + gap + 210, 0);
-  gr.addColorStop(0, "rgba(0,178,202,.95)"); gr.addColorStop(1, "rgba(0,178,202,0)");
-  ctx.strokeStyle = gr;
-  ctx.beginPath(); ctx.moveTo(word.right + gap, y); ctx.lineTo(word.right + gap + len, y); ctx.stroke();
-  // жёлтый акцент — короткая черта под словом, как «росток» в знаке ERTIS
-  const yk = eo3(prog(t, WORD0 + 1.2, WORD0 + 2.0));
-  ctx.fillStyle = "#fddb27";
-  ctx.globalAlpha = yk;
-  ctx.fillRect(960 - 28 * yk, WORD_Y + 34, 56 * yk, 4);
+  ctx.lineWidth = 2; ctx.lineCap = "butt";
+  [[fin.left - gap, -1], [fin.right + gap, 1]].forEach(([x, dir]) => {
+    const g = ctx.createLinearGradient(x, 0, x + dir * M.capH * RULE_LEN, 0);
+    g.addColorStop(0, `rgba(${COL.rule},.95)`); g.addColorStop(1, `rgba(${COL.rule},0)`);
+    ctx.strokeStyle = g;
+    ctx.beginPath(); ctx.moveTo(Math.round(x), y); ctx.lineTo(Math.round(x + dir * len), y); ctx.stroke();
+  });
   ctx.restore();
 }
 
-// Горизонтальный блик-«анаморф» в момент появления «1» и блик по логотипу
+// ---------- Блики ----------
 const fl = $("flare").getContext("2d");
 function flare(t) {
   fl.clearRect(0, 0, 1920, 1080);
   const a = prog(t, REVEAL - 0.15, REVEAL + 0.1) * (1 - eo3(prog(t, REVEAL + 0.1, REVEAL + 1.6)));
-  if (a > 0) {
-    const g = fl.createRadialGradient(960, ONE_CY, 0, 960, ONE_CY, 900);
-    g.addColorStop(0, `rgba(190,245,255,${0.55 * a})`);
-    g.addColorStop(0.08, `rgba(0,178,202,${0.25 * a})`);
-    g.addColorStop(1, "rgba(0,178,202,0)");
-    fl.save(); fl.translate(960, ONE_CY); fl.scale(1, 0.035); fl.translate(-960, -ONE_CY);
-    fl.fillStyle = g; fl.fillRect(0, 0, 1920, 1080); fl.restore();
-    const c = fl.createRadialGradient(960, ONE_CY, 0, 960, ONE_CY, 260);
-    c.addColorStop(0, `rgba(220,250,255,${0.35 * a})`); c.addColorStop(1, "rgba(0,178,202,0)");
-    fl.fillStyle = c; fl.fillRect(0, 0, 1920, 1080);
-  }
+  if (a <= 0) return;
+  const cy = M.oneTop + M.one.h / 2;
+  const g = fl.createRadialGradient(960, cy, 0, 960, cy, 900);
+  g.addColorStop(0, `rgba(200,230,255,${0.55 * a})`);
+  g.addColorStop(0.08, `rgba(70,160,255,${0.25 * a})`);
+  g.addColorStop(1, "rgba(70,160,255,0)");
+  fl.save(); fl.translate(960, cy); fl.scale(1, 0.035); fl.translate(-960, -cy);
+  fl.fillStyle = g; fl.fillRect(0, 0, 1920, 1080); fl.restore();
+  const c = fl.createRadialGradient(960, cy, 0, 960, cy, 260);
+  c.addColorStop(0, `rgba(220,240,255,${0.35 * a})`); c.addColorStop(1, "rgba(70,160,255,0)");
+  fl.fillStyle = c; fl.fillRect(0, 0, 1920, 1080);
 }
 
 function shine(t) {
   const s = prog(t, SHINE, SHINE + 1.4);
   if (s <= 0 || s >= 1) return;
   const ctx = lctx;
-  const x = lerp(500, 1420, eio2(s));
+  const x = lerp(560, 1360, eio2(s));
   const g = ctx.createLinearGradient(x - 120, 0, x + 120, 0);
-  g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(0.5, "rgba(255,255,255,.85)"); g.addColorStop(1, "rgba(255,255,255,0)");
+  g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(0.5, "rgba(255,255,255,.8)"); g.addColorStop(1, "rgba(255,255,255,0)");
   ctx.save();
   ctx.globalCompositeOperation = "source-atop";
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.transform(1, 0, -0.3, 1, 0, 0);
@@ -243,48 +287,53 @@ window.DURATION = END;
 window.render = function (t, fps = 25) {
   if (!M) measure();
 
-  // Камера: плавный пролёт вперёд с лёгким поворотом, к логотипу замедляется
   const fly = eio3(prog(t, 0, REVEAL + 1.2));
   const camZ = lerp(-200, 2300, fly) + t * 25;
   const camRY = lerp(-9, 0, fly) + Math.sin(t * 0.4) * 0.6;
   const camX = lerp(160, 0, fly);
   $("cam").style.transform = `rotateY(${camRY}deg) translate3d(${-camX}px, 0, ${camZ}px)`;
+  const settle = eo3(prog(t, REVEAL - 0.3, REVEAL + 1.5));
   panels.forEach(p => {
-    const z = p.z;
-    const worldZ = z + camZ;                       // расстояние до камеры
-    const near = clamp((worldZ - 300) / 700);       // близко к камере — исчезает
-    const far = clamp((worldZ + 4200) / 1600);      // далеко — проявляется из темноты
-    const settle = eo3(prog(t, REVEAL - 0.3, REVEAL + 1.5));
-    let op = far * (1 - near) * lerp(1, 0.35, settle);
-    p.el.style.opacity = op.toFixed(3);
-    p.el.style.transform =
-      `translate3d(${p.x + p.drift * t}px, ${p.y}px, ${z}px) rotateY(${p.ry}deg)`;
+    const worldZ = p.z + camZ;
+    const near = clamp((worldZ - 300) / 700);
+    const far = clamp((worldZ + 4200) / 1600);
+    p.el.style.opacity = (far * (1 - near) * lerp(1, 0.32, settle)).toFixed(3);
+    p.el.style.transform = `translate3d(${p.x + p.drift * t}px, ${p.y}px, ${p.z}px) rotateY(${p.ry}deg)`;
     p.el.style.filter = settle > 0.01 ? `blur(${(settle * 6).toFixed(1)}px)` : "none";
   });
 
-  const intro = eio2(prog(t, 0, 1.6));
-  floor(t, intro * lerp(1, 0.7, eo3(prog(t, REVEAL, REVEAL + 2))));
+  floor(t, eio2(prog(t, 0, 1.6)) * lerp(1, 0.65, eo3(prog(t, REVEAL, REVEAL + 2))));
   $("beam").style.opacity = lerp(0.2, 1, eio2(prog(t, REVEAL - 1, REVEAL + 0.6)));
 
-  // Логотип
   lctx.setTransform(1, 0, 0, 1, 0, 0);
   lctx.clearRect(0, 0, 1920, 1080);
   const r = eo4(prog(t, REVEAL, REVEAL + 1.4));
   if (r > 0) {
-    const ang = lerp(0.35, 0.8, eio2(prog(t, REVEAL, END)));   // грань «поворачивается» — ощущение объёма
-    drawOne(t, r, lerp(1.12, 1, r) * lerp(1, 0.985, prog(t, REVEAL + 1.4, END)), ang, lerp(0, 24, eo3(prog(t, REVEAL + 0.1, REVEAL + 1.6))));
+    const ang = lerp(0.45, 0.85, eio2(prog(t, REVEAL, END)));
+    const depth = lerp(0, DEPTH, eo3(prog(t, REVEAL + 0.1, REVEAL + 1.6)));
+    drawOne(r, lerp(1.1, 1, r), ang, depth);
   }
-  const word = drawWord(t);
+  drawWord(t);
   shine(t);
-  drawRules(t, word);
+  drawRules(t);
   flare(t);
 
-  $("stage").style.filter = `brightness(${(1 - eio2(prog(t, END - 0.7, END))) * lerp(0, 1, eio2(prog(t, 0, 0.6)))})`;
+  $("stage").style.filter = `brightness(${(1 - eio2(prog(t, END - 0.7, END))) * eio2(prog(t, 0, 0.6))})`;
   grain(Math.round(t * fps));
 };
 
-document.fonts.load(`700 ${ONE_SIZE}px "Inter Display"`)
-  .then(() => document.fonts.load(`600 ${WORD_SIZE}px "Inter Display"`))
+// Отладка сетки: render(t) затем showGrid() — рисует центральные оси и границы групп
+window.showGrid = function () {
+  const c = lctx; c.save(); c.strokeStyle = "rgba(255,0,80,.8)"; c.lineWidth = 1;
+  const fin = wordLayout(TRACK * WORD_SIZE);
+  [[960, 0, 960, 1080], [0, 540, 1920, 540], [0, M.oneTop, 1920, M.oneTop], [0, M.oneBase, 1920, M.oneBase],
+   [0, M.wordBase - M.capH, 1920, M.wordBase - M.capH], [0, M.wordBase, 1920, M.wordBase],
+   [fin.left, 0, fin.left, 1080], [fin.right, 0, fin.right, 1080]]
+    .forEach(([a, b, x, y]) => { c.beginPath(); c.moveTo(a + .5, b + .5); c.lineTo(x + .5, y + .5); c.stroke(); });
+  c.restore();
+};
+
+document.fonts.load(FONT_ONE).then(() => document.fonts.load(FONT_WORD))
   .then(() => document.fonts.ready)
   .then(() => { measure(); window.render(0); window.READY = true; });
 </script>
