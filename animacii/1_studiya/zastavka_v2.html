@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>1 СТУДИЯ — заставка, вариант 2</title>
+<style>
+  :root {
+    --bg: #0b0b0d;
+    --bg2: #1b1416;
+    --accent: #e8402c;
+    --text: #f4f1ea;
+  }
+  html, body { margin: 0; background: #000; }
+  #stage {
+    position: relative; width: 1920px; height: 1080px; overflow: hidden;
+    background: radial-gradient(ellipse 75% 65% at 50% 50%, var(--bg2) 0%, var(--bg) 72%);
+  }
+  #camera { position: absolute; inset: 0; transform-origin: 50% 50%; }
+  .beam {
+    position: absolute; top: -260px; width: 380px; height: 1600px;
+    background: linear-gradient(180deg, rgba(255,235,220,.22), rgba(255,235,220,0) 70%);
+    filter: blur(36px); transform-origin: 50% 0;
+  }
+  #glow {
+    position: absolute; left: 960px; top: 540px; width: 1600px; height: 900px; margin: -450px 0 0 -800px;
+    background: radial-gradient(ellipse at center, rgba(232,64,44,.55) 0%, rgba(232,64,44,.12) 35%, rgba(232,64,44,0) 65%);
+  }
+  #c { position: absolute; left: 0; top: 0; }
+  #flash { position: absolute; inset: 0; background: #fff6ee; }
+  #grain { position: absolute; left: 0; top: 0; opacity: .07; mix-blend-mode: screen; }
+  #vignette {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 50%, rgba(0,0,0,.7) 100%);
+  }
+  /* скрытый текст, чтобы шрифт гарантированно загрузился до рендера */
+  #fontwarm { position: absolute; left: -9999px; font: 900 40px "Inter Display"; }
+</style>
+<!-- Огибающая громкости звука по кадрам (генерирует zvuk_v2.py) -->
+<script src="zvuk_v2_env.js"></script>
+</head>
+<body>
+<div id="stage">
+  <div id="camera">
+    <div class="beam" id="beam1" style="left:380px"></div>
+    <div class="beam" id="beam2" style="left:1160px"></div>
+    <div id="glow"></div>
+    <canvas id="c" width="1920" height="1080"></canvas>
+  </div>
+  <div id="flash"></div>
+  <canvas id="grain" width="960" height="540" style="width:1920px;height:1080px"></canvas>
+  <div id="vignette"></div>
+  <div id="fontwarm">1СТУДИЯ</div>
+</div>
+
+<script>
+// ---------- Параметры ----------
+const WORD = "СТУДИЯ";
+const F = 200;               // кегль финального логотипа
+const ONE_K = 1.3;           // «1» в логотипе выше букв в 1.3 раза
+const BIG = 3.0;             // во сколько раз «1» крупнее в момент удара (от размера в логотипе)
+const HIT = 2.0, LETTER0 = 2.75, LETTER_STEP = 0.125, CHORD = 3.5;  // = тайминги звука
+const ENV = window.ENV || new Array(175).fill(0);
+const ENV_FPS = window.ENV_FPS || 25;
+
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const ACCENT = css("--accent"), TEXT = css("--text");
+
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const prog = (t, t0, t1) => clamp((t - t0) / (t1 - t0));
+const lerp = (a, b, k) => a + (b - a) * k;
+const eio3 = k => k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const eo3 = k => 1 - Math.pow(1 - k, 3);
+const ei3 = k => k * k * k;
+const $ = id => document.getElementById(id);
+const env = t => ENV[clamp(Math.floor(t * ENV_FPS), 0, ENV.length - 1)];
+
+const ctx = $("c").getContext("2d");
+let M;  // раскладка логотипа
+
+function layout() {
+  ctx.font = `900 ${F}px "Inter Display"`;
+  const one = ctx.measureText("1");
+  const oneW = one.actualBoundingBoxRight + one.actualBoundingBoxLeft;
+  const capH = ctx.measureText("С").actualBoundingBoxAscent;
+  const oneH = one.actualBoundingBoxAscent;
+  const spacing = F * 0.01;
+  const lw = [...WORD].map(ch => ctx.measureText(ch).width);
+  const wordW = lw.reduce((a, b) => a + b, 0) + spacing * (lw.length - 1);
+  const gap = F * 0.42;
+  const total = oneW * ONE_K + gap + wordW;
+  const x0 = 960 - total / 2;
+  const base = 540 + capH / 2;
+  const lx = []; let x = x0 + oneW * ONE_K + gap;
+  lw.forEach(w => { lx.push(x); x += w + spacing; });
+  M = {
+    oneLocalX: one.actualBoundingBoxLeft - oneW / 2, oneLocalY: oneH / 2, base,
+    oneCX: x0 + oneW * ONE_K / 2, oneCY: base - oneH * ONE_K / 2, oneLeft: x0,
+    lx, lw, wordX: x0 + oneW * ONE_K + gap, wordW, capH,
+  };
+}
+
+// Детерминированное зерно
+const gctx = $("grain").getContext("2d");
+const gimg = gctx.createImageData(960, 540);
+function grain(frame) {
+  let s = ((frame + 7) * 2654435761) >>> 0;
+  const d = gimg.data;
+  for (let i = 0; i < d.length; i += 4) {
+    s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0;
+    d[i] = d[i + 1] = d[i + 2] = s & 255; d[i + 3] = 255;
+  }
+  gctx.putImageData(gimg, 0, 0);
+}
+
+// Столбики «звуковой волны»
+function bars(t, { n, x0, x1, cy, maxH, w, amp, spread = 1, alpha = 1, color, mirror = true, seed = 0 }) {
+  const step = (x1 - x0) / (n - 1);
+  for (let i = 0; i < n; i++) {
+    const u = i / (n - 1);
+    const win = Math.pow(Math.sin(Math.PI * u), 1.2);
+    const wob = 0.3 + 0.7 * Math.abs(Math.sin(i * 0.61 + seed + t * 7.3 + Math.sin(i * 1.7 + seed) * 2.1));
+    const h = Math.max(w, maxH * amp * win * wob);
+    const x = 960 + (x0 + i * step - 960) * spread;
+    ctx.globalAlpha = alpha * (0.55 + 0.45 * win);
+    ctx.fillStyle = typeof color === "function" ? color(u) : color;
+    const y = mirror ? cy - h / 2 : cy - h;
+    ctx.beginPath(); ctx.roundRect(x - w / 2, y, w, h, w / 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+window.DURATION = 7;
+window.render = function (t, fps = 25) {
+  if (!M) layout();
+  const W = 1920, H = 1080;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  // Тряска камеры на ударах
+  const shake = (t >= HIT ? 16 * Math.exp(-(t - HIT) * 10) : 0) + (t >= CHORD ? 6 * Math.exp(-(t - CHORD) * 10) : 0);
+  const sx = Math.sin(t * 97) * shake, sy = Math.cos(t * 83) * shake;
+  $("camera").style.transform =
+    `translate(${sx}px, ${sy}px) scale(${lerp(1.0, 1.04, eio3(prog(t, 0, 7)))})`;
+
+  // Лучи: пульс на долях до удара, затем ровный свет
+  const beat = t < HIT ? Math.exp(-((t % 0.5)) * 6) : 0;
+  const bOn = eo3(prog(t, 0, 1.2));
+  const after = t >= HIT ? 0.5 + 0.5 * Math.exp(-(t - HIT) * 3) : 0;
+  [$("beam1"), $("beam2")].forEach((b, i) => {
+    b.style.opacity = clamp(bOn * (0.35 + 0.5 * beat) + after);
+    const sw = (i ? -1 : 1) * (lerp(22, 6, eio3(prog(t, 0, HIT))) + Math.sin(t * 0.9 + i) * 2);
+    b.style.transform = `rotate(${sw}deg)`;
+  });
+
+  // ---- 0–2 с: звуковая волна, на подходе к удару стягивается в центр ----
+  if (t < HIT + 0.05) {
+    const spread = 1 - eio3(prog(t, 1.65, HIT));
+    const a = Math.max(0.08, env(t)) * lerp(0.4, 1, prog(t, 0, HIT));
+    bars(t, {
+      n: 84, x0: 180, x1: 1740, cy: 540, maxH: 520, w: 8, amp: a, spread,
+      alpha: eo3(prog(t, 0, 0.4)) * clamp(spread * 3 - 0.6),
+      color: u => (Math.abs(u - 0.5) < 0.08 ? ACCENT : TEXT),
+    });
+  }
+
+  // ---- «1»: падение и приземление в удар, потом уходит в логотип ----
+  if (t >= HIT - 0.16) {
+    const fall = prog(t, HIT - 0.16, HIT);
+    const land = prog(t, HIT, HIT + 0.35);
+    const move = eio3(prog(t, 2.45, 3.0));
+    const cx = lerp(960, M.oneCX, move), cy = lerp(540, M.oneCY, move);
+    let s = lerp(BIG, 1, move) * ONE_K;
+    // сжатие при приземлении и отскок
+    const squash = t < HIT ? lerp(1.9, 1, ei3(fall)) : 1 - 0.14 * Math.sin(land * Math.PI * 2) * Math.exp(-land * 4);
+    const dropY = t < HIT ? lerp(-900, 0, ei3(fall)) : 0;
+    ctx.save();
+    ctx.translate(cx, cy + dropY);
+    ctx.scale(s / Math.sqrt(squash), s * squash);
+    ctx.font = `900 ${F}px "Inter Display"`;
+    ctx.fillStyle = ACCENT;
+    ctx.fillText("1", M.oneLocalX, M.oneLocalY);
+    ctx.restore();
+  }
+
+  // ---- СТУДИЯ: буквы впечатываются по тикам ----
+  ctx.font = `900 ${F}px "Inter Display"`;
+  [...WORD].forEach((ch, k) => {
+    const p = prog(t, LETTER0 + k * LETTER_STEP, LETTER0 + k * LETTER_STEP + 0.14);
+    if (p <= 0) return;
+    const sc = lerp(1.45, 1, eo3(p));
+    const cx = M.lx[k] + M.lw[k] / 2, cy = M.base - M.capH / 2;
+    ctx.save();
+    ctx.globalAlpha = eo3(p);
+    ctx.translate(cx, cy); ctx.scale(sc, sc); ctx.translate(-cx, -cy);
+    ctx.fillStyle = TEXT;
+    ctx.fillText(ch, M.lx[k], M.base);
+    ctx.restore();
+  });
+
+  // ---- Блик по логотипу на финальном аккорде ----
+  const sh = prog(t, CHORD, CHORD + 0.9);
+  if (sh > 0 && sh < 1) {
+    const x = lerp(M.oneLeft - 300, M.wordX + M.wordW + 300, eio3(sh));
+    const g = ctx.createLinearGradient(x - 160, 0, x + 160, 0);
+    g.addColorStop(0, "rgba(255,255,255,0)");
+    g.addColorStop(0.5, "rgba(255,255,255,0.75)");
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.save();
+    ctx.globalCompositeOperation = "source-atop";
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.transform(1, 0, -0.35, 1, 0, 0);
+    ctx.fillStyle = g;
+    ctx.fillRect(x - 600, 0, 1200 + 600, 1080);
+    ctx.restore();
+  }
+
+  // ---- Эквалайзер под названием (вместо подписи) ----
+  if (t >= CHORD - 0.1) {
+    const a = 0.3 + 0.7 * env(t);
+    const grow = eo3(prog(t, CHORD - 0.1, CHORD + 0.4));
+    const cy = M.base + 70;
+    bars(t, {
+      n: 34, x0: M.wordX + 6, x1: M.wordX + M.wordW - 6, cy, maxH: 90 * grow, w: 8, amp: a,
+      alpha: grow, color: ACCENT, seed: 3,
+    });
+  }
+
+  // Свечение за логотипом
+  const glow = t < HIT ? 0 : 0.55 * Math.exp(-(t - HIT) * 2.5) + (t >= CHORD ? 0.6 * eo3(prog(t, CHORD, CHORD + 0.3)) * (0.55 + 0.45 * Math.exp(-(t - CHORD) * 1.2)) : 0);
+  $("glow").style.opacity = glow;
+  $("glow").style.left = lerp(960, (M.oneLeft + M.wordX + M.wordW) / 2, eio3(prog(t, 2.45, 3.0))) + "px";
+
+  // Вспышка в удар
+  $("flash").style.opacity = t >= HIT ? 0.55 * (1 - eo3(prog(t, HIT, HIT + 0.3))) : 0;
+
+  // Уход в чёрный
+  $("stage").style.filter = `brightness(${1 - eio3(prog(t, 6.5, 7.0))})`;
+  grain(Math.round(t * fps));
+};
+
+document.fonts.load(`900 ${F}px "Inter Display"`).then(() => document.fonts.ready).then(() => {
+  layout(); window.render(0); window.READY = true;
+});
+</script>
+</body>
+</html>
