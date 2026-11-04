@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>1 СТУДИЯ — заставка</title>
+<style>
+  /* Фирменные параметры — менять здесь */
+  :root {
+    --bg: #07090f;
+    --bg2: #121a2b;
+    --accent: #e8402c;   /* цвет «1» и акцентов */
+    --text: #f4f1ea;
+    --font: "Inter Display", "Inter", sans-serif;
+  }
+  html, body { margin: 0; background: #000; }
+  #stage {
+    position: relative; width: 1920px; height: 1080px; overflow: hidden;
+    background: radial-gradient(ellipse 70% 60% at 50% 45%, var(--bg2) 0%, var(--bg) 70%);
+    font-family: var(--font);
+  }
+  .abs { position: absolute; left: 0; top: 0; }
+  #camera { width: 1920px; height: 1080px; transform-origin: 50% 50%; }
+  .beam {
+    position: absolute; top: -200px; width: 520px; height: 1500px;
+    background: linear-gradient(180deg, rgba(255,240,220,.20), rgba(255,240,220,0) 75%);
+    filter: blur(40px); transform-origin: 50% 0;
+  }
+  #hair {
+    position: absolute; top: 539px; height: 2px; background: var(--text);
+    box-shadow: 0 0 12px rgba(255,255,255,.6);
+  }
+  .dot {
+    position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%;
+    top: 540px;
+  }
+  #dotL { background: var(--text); box-shadow: 0 0 24px 6px rgba(255,255,255,.55); }
+  #dotR { background: var(--accent); box-shadow: 0 0 24px 6px rgba(232,64,44,.65); }
+  #flash {
+    position: absolute; left: 960px; top: 540px; width: 1400px; height: 1400px; margin: -700px 0 0 -700px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,250,240,.95) 0%, rgba(255,200,170,.35) 18%, rgba(255,120,90,0) 55%);
+  }
+  #logo { position: absolute; left: 960px; top: 540px; width: 0; height: 0; }
+  #ring { position: absolute; left: -260px; top: -260px; overflow: visible; }
+  #oneMask {
+    position: absolute; left: -200px; top: -260px; width: 400px; height: 520px; overflow: hidden;
+  }
+  #one {
+    position: absolute; left: 0; width: 400px; top: 0; height: 520px; line-height: 520px;
+    text-align: center; font-weight: 900; font-size: 470px; color: var(--accent);
+    letter-spacing: -0.04em;
+  }
+  #word {
+    position: absolute; top: 0; left: 0; display: flex; white-space: nowrap;
+  }
+  .lm { overflow: hidden; height: 200px; display: inline-block; }
+  .l {
+    display: inline-block; font-weight: 900; font-size: 190px; line-height: 200px; color: var(--text);
+    letter-spacing: 0.01em;
+  }
+  #rule { position: absolute; height: 6px; background: var(--accent); transform-origin: 0 50%; }
+  #tag {
+    position: absolute; font-weight: 500; font-size: 30px; color: var(--text);
+    white-space: nowrap; text-transform: uppercase;
+  }
+  #grain { position: absolute; left: 0; top: 0; opacity: .07; mix-blend-mode: screen; }
+  #vignette {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,.65) 100%);
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="camera" class="abs">
+    <div class="beam" id="beam1" style="left:430px"></div>
+    <div class="beam" id="beam2" style="left:970px"></div>
+    <div id="hair"></div>
+    <div class="dot" id="dotL"></div>
+    <div class="dot" id="dotR"></div>
+    <div id="flash"></div>
+    <div id="logo">
+      <svg id="ring" width="520" height="520" viewBox="0 0 520 520">
+        <circle id="ringC" cx="260" cy="260" r="250" fill="none" stroke="rgba(244,241,234,.85)" stroke-width="4"/>
+        <circle id="ringArc" cx="260" cy="260" r="250" fill="none" stroke="#e8402c" stroke-width="8" stroke-linecap="round"/>
+      </svg>
+      <div id="oneMask"><div id="one">1</div></div>
+    </div>
+    <div id="word"></div>
+    <div id="rule"></div>
+    <div id="tag">Один гость&nbsp;&nbsp;·&nbsp;&nbsp;одна проблема</div>
+  </div>
+  <canvas id="grain" width="960" height="540" style="width:1920px;height:1080px"></canvas>
+  <div id="vignette"></div>
+</div>
+
+<script>
+// ---------- Тексты ----------
+const WORD = "СТУДИЯ";
+
+// ---------- Хелперы ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const prog = (t, t0, t1) => clamp((t - t0) / (t1 - t0));
+const lerp = (a, b, k) => a + (b - a) * k;
+const eio3 = k => k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const eo3 = k => 1 - Math.pow(1 - k, 3);
+const eo5 = k => 1 - Math.pow(1 - k, 5);
+const eoBack = k => { const c1 = 1.4, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+const $ = id => document.getElementById(id);
+
+// Буквы слова
+const wordEl = $("word");
+const letters = [...WORD].map(ch => {
+  const m = document.createElement("span"); m.className = "lm";
+  const s = document.createElement("span"); s.className = "l"; s.textContent = ch;
+  m.appendChild(s); wordEl.appendChild(m); return s;
+});
+
+// Раскладка финального логотипа: [кольцо с «1»] + [СТУДИЯ], по центру кадра
+const RING_R = 260, GAP = 70;
+let wordW, lockLeft, ringCX, wordX, tagW;
+function layout() {
+  wordW = wordEl.getBoundingClientRect().width;
+  tagW = $("tag").getBoundingClientRect().width;
+  const total = RING_R * 2 + GAP + wordW;
+  lockLeft = 960 - total / 2;
+  ringCX = lockLeft + RING_R;
+  wordX = lockLeft + RING_R * 2 + GAP;
+}
+
+// Детерминированное зерно (одинаковое при каждом рендере)
+const gctx = $("grain").getContext("2d");
+const gimg = gctx.createImageData(960, 540);
+function grain(frame) {
+  let s = (frame * 2654435761) >>> 0;
+  const d = gimg.data;
+  for (let i = 0; i < d.length; i += 4) {
+    s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0;
+    const v = s & 255; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+  }
+  gctx.putImageData(gimg, 0, 0);
+}
+
+const CIRC = 2 * Math.PI * 250;
+$("ringC").style.strokeDasharray = CIRC;
+$("ringArc").style.strokeDasharray = `${CIRC * 0.12} ${CIRC}`;
+
+// ---------- Кадр в момент t (секунды) ----------
+window.DURATION = 7;
+window.render = function (t, fps = 25) {
+  if (wordW === undefined) layout();
+
+  // Камера: медленный наезд на всю заставку
+  $("camera").style.transform = `scale(${lerp(1.0, 1.045, eio3(prog(t, 0, 7)))})`;
+
+  // Студийные лучи
+  const b = eo3(prog(t, 0.0, 2.0));
+  $("beam1").style.opacity = b * 0.9;
+  $("beam2").style.opacity = b * 0.9;
+  $("beam1").style.transform = `rotate(${lerp(14, 8, b) + Math.sin(t * 0.8) * 1.5}deg)`;
+  $("beam2").style.transform = `rotate(${lerp(-14, -8, b) - Math.sin(t * 0.7) * 1.5}deg)`;
+
+  // 0–1.25 c: ведущий и гость идут навстречу друг другу
+  const m = eio3(prog(t, 0.05, 1.25));
+  const xL = lerp(-40, 960, m), xR = lerp(1960, 960, m);
+  const dotsOn = t < 1.3 ? 1 : 0;
+  $("dotL").style.left = xL + "px"; $("dotR").style.left = xR + "px";
+  $("dotL").style.opacity = $("dotR").style.opacity = dotsOn;
+  const hairFade = 1 - prog(t, 1.25, 1.9);
+  // Линия стягивается к центру: сначала оставляет след, потом исчезает
+  const trail = 520 * (1 - eo3(prog(t, 1.25, 1.9)));
+  const hl = Math.max(0, Math.min(xL, 960 - trail)), hr = Math.min(1920, Math.max(xR, 960 + trail));
+  const tailL = lerp(0, xL, eo3(prog(t, 0.3, 1.25)));
+  const tailR = lerp(1920, xR, eo3(prog(t, 0.3, 1.25)));
+  const left = t < 1.25 ? tailL : hl, right = t < 1.25 ? tailR : hr;
+  $("hair").style.left = left + "px"; $("hair").style.width = Math.max(0, right - left) + "px";
+  $("hair").style.opacity = 0.75 * hairFade;
+  $("hair").style.background = `linear-gradient(90deg, rgba(244,241,234,0), #f4f1ea 30%, #fff 50%, #e8402c 70%, rgba(232,64,44,0))`;
+
+  // 1.25 c: встреча — вспышка
+  const f = prog(t, 1.2, 1.3) * (1 - eo3(prog(t, 1.3, 2.1)));
+  $("flash").style.opacity = f;
+  $("flash").style.transform = `scale(${lerp(0.2, 1.1, eo3(prog(t, 1.2, 2.1)))})`;
+
+  // Логотип: позиция центра (сдвигается влево на 2.6–3.4 c)
+  const shift = eio3(prog(t, 2.6, 3.4));
+  const cx = lerp(960, ringCX, shift);
+  const logoScale = lerp(1.12, 1.0, eo3(prog(t, 1.3, 2.6)));
+  $("logo").style.left = cx + "px";
+  $("logo").style.transform = `scale(${logoScale})`;
+
+  // Кольцо прорисовывается
+  const r = eio3(prog(t, 1.3, 2.4));
+  $("ringC").style.strokeDashoffset = CIRC * (1 - r);
+  $("ringC").style.opacity = prog(t, 1.3, 1.4);
+  $("ring").style.transform = `rotate(${-90 + lerp(-120, 0, eo3(prog(t, 1.3, 2.6)))}deg)`;
+  // Красный блик бежит по кольцу
+  $("ringArc").style.strokeDashoffset = -CIRC * (t * 0.22);
+  $("ringArc").style.opacity = prog(t, 1.9, 2.4) * 0.95;
+
+  // «1» поднимается из маски
+  const o = eoBack(prog(t, 1.45, 2.35));
+  $("one").style.transform = `translateY(${lerp(540, 0, o)}px)`;
+
+  // СТУДИЯ: буквы по очереди
+  $("word").style.left = wordX + "px";
+  $("word").style.top = (540 - 100 - 28) + "px";
+  letters.forEach((el, i) => {
+    const k = eo5(prog(t, 2.95 + i * 0.07, 3.75 + i * 0.07));
+    el.style.transform = `translateY(${lerp(210, 0, k)}px)`;
+  });
+
+  // Акцентная линия под словом
+  const ru = eo3(prog(t, 3.55, 4.25));
+  const rl = $("rule").style;
+  rl.left = (wordX + 8) + "px"; rl.top = (540 + 92) + "px"; rl.width = (wordW - 16) + "px";
+  rl.transform = `scaleX(${ru})`;
+
+  // Подзаголовок
+  const tg = eo3(prog(t, 3.9, 4.9));
+  const ts = $("tag").style;
+  ts.left = (wordX + 8) + "px"; ts.top = (540 + 118) + "px";
+  ts.opacity = tg * 0.85;
+  ts.letterSpacing = lerp(0.55, 0.32, tg) + "em";
+
+  // Финальный уход (в последние 0.5 с — в затемнение)
+  $("stage").style.filter = `brightness(${1 - eio3(prog(t, 6.5, 7.0))})`;
+
+  grain(Math.round(t * fps));
+};
+
+document.fonts.ready.then(() => { layout(); window.render(0); window.READY = true; });
+</script>
+</body>
+</html>
