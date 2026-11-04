@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>ТЕЛЕЦЕНТР — заставка</title>
+<style>
+  /* Та же система, что у заставки «1 СТУДИЯ» v4: синяя гамма, стекло, акцентные линии — бирюзовый ERTIS */
+  :root {
+    --deep: #020a1e;
+    --deep2: #0b3a7a;
+  }
+  html, body { margin: 0; background: #000; }
+  #stage {
+    position: relative; width: 1920px; height: 1080px; overflow: hidden;
+    background:
+      radial-gradient(ellipse 60% 45% at 50% 46%, rgba(30,120,210,.45) 0%, rgba(30,120,210,0) 70%),
+      radial-gradient(ellipse 90% 75% at 50% 42%, var(--deep2) 0%, var(--deep) 80%);
+  }
+  #floor, #waves, #logo, #flare { position: absolute; left: 0; top: 0; }
+  #world { position: absolute; inset: 0; perspective: 1300px; perspective-origin: 50% 46%; }
+  #cam { position: absolute; left: 960px; top: 500px; transform-style: preserve-3d; }
+  .panel {
+    position: absolute; transform-style: preserve-3d; box-sizing: border-box;
+    border: 1.5px solid rgba(150,205,255,.45);
+    background: linear-gradient(135deg, rgba(70,160,255,.16), rgba(70,160,255,.03) 60%, rgba(255,255,255,.06));
+    box-shadow: inset 0 0 40px rgba(70,160,255,.08);
+  }
+  #beam {
+    position: absolute; left: 960px; top: -300px; width: 900px; height: 1500px; margin-left: -450px;
+    background: radial-gradient(ellipse 30% 60% at 50% 0%, rgba(175,215,255,.24), rgba(175,215,255,0) 70%);
+    filter: blur(20px);
+  }
+  #flare { mix-blend-mode: screen; }
+  #grain { position: absolute; left: 0; top: 0; opacity: .04; mix-blend-mode: screen; }
+  #vignette {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 50%, rgba(0,0,0,.65) 100%);
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="floor" width="1920" height="1080"></canvas>
+  <div id="beam"></div>
+  <div id="world"><div id="cam"></div></div>
+  <canvas id="waves" width="1920" height="1080"></canvas>
+  <canvas id="logo" width="1920" height="1080"></canvas>
+  <canvas id="flare" width="1920" height="1080"></canvas>
+  <canvas id="grain" width="960" height="540" style="width:1920px;height:1080px"></canvas>
+  <div id="vignette"></div>
+</div>
+
+<script>
+// ---------- Тайминги (совпадают со звуком zvuk.py) ----------
+const DRAW0 = 0.9;    // вышка начинает прорисовываться снизу
+const DRAW1 = 3.2;    // вышка дорисована
+const REVEAL = 3.2;   // загорается маяк, идут волны эфира
+const WORD0 = 4.4;    // появляется «ТЕЛЕЦЕНТР»
+const SHINE = 5.8;    // блик по логотипу
+const PULSES = [3.2, 3.65, 4.1, 6.4];   // волны эфира от маяка
+const END = 9.0;
+
+// ---------- Типографика и сетка ----------
+const WORD = "ТЕЛЕЦЕНТР";
+const WORD_SIZE = 84;           // кегль слова
+const TRACK = 0.32;             // разрядка в финале, доля кегля
+const GAP_TOWER_WORD = 1.0;     // отступ основания вышки → слово, в высотах прописной
+const RULE_GAP = 1.0;           // отступ линии от слова, в высотах прописной
+const RULE_LEN = 2.2;           // длина линии, в высотах прописной
+const OPTICAL_Y = -12;          // группа чуть выше геометрического центра
+
+// ---------- Вышка (локальные координаты: 0,0 — центр основания, вверх — минус) ----------
+const T_H = 380;                // высота решётчатой части
+const T_BASE = 150;             // полуширина основания
+const T_TOP = 20;               // полуширина наверху решётки
+const MAST = 74;                // мачта над площадкой
+const BEACON_R = 7;
+const LEVELS = [0, 0.2, 0.39, 0.56, 0.71, 0.84, 0.94, 1];
+const hw = h => T_TOP + (T_BASE - T_TOP) * Math.pow(1 - h / T_H, 1.7);   // вогнутый силуэт
+
+const COL = {
+  line0: "#ffffff", line1: "#a9d4ff",
+  glow: "rgba(70,160,255,.9)",
+  rule: "0,178,202",
+  wave: "120,190,255",
+};
+
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const prog = (t, t0, t1) => clamp((t - t0) / (t1 - t0));
+const lerp = (a, b, k) => a + (b - a) * k;
+const eio2 = k => k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+const eio3 = k => k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const eo3 = k => 1 - Math.pow(1 - k, 3);
+const eo4 = k => 1 - Math.pow(1 - k, 4);
+const $ = id => document.getElementById(id);
+
+// ---------- Стеклянные панели в 3D (как в «1 СТУДИЯ» v4) ----------
+let seed = 20261105;
+const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+const panels = [];
+for (let i = 0; i < 30; i++) {
+  const side = i % 2 ? 1 : -1;
+  const p = {
+    x: side * lerp(180, 1500, rnd()), y: lerp(-520, 640, rnd()), z: lerp(-3800, 300, rnd()),
+    w: lerp(120, 520, rnd()), h: lerp(90, 620, rnd()), ry: side * lerp(8, 35, rnd()),
+    drift: lerp(-30, 30, rnd()),
+  };
+  const el = document.createElement("div"); el.className = "panel";
+  el.style.width = p.w + "px"; el.style.height = p.h + "px";
+  el.style.marginLeft = -p.w / 2 + "px"; el.style.marginTop = -p.h / 2 + "px";
+  $("cam").appendChild(el); p.el = el; panels.push(p);
+}
+
+// ---------- Пол ----------
+const fctx = $("floor").getContext("2d");
+function floor(t, a) {
+  fctx.clearRect(0, 0, 1920, 1080);
+  const hz = 610, vx = 960;
+  fctx.lineWidth = 1;
+  for (let i = -24; i <= 24; i++) {
+    const xb = vx + i * 140;
+    const g = fctx.createLinearGradient(0, hz, 0, 1080);
+    g.addColorStop(0, "rgba(90,170,255,0)"); g.addColorStop(1, `rgba(90,170,255,${0.2 * a})`);
+    fctx.strokeStyle = g;
+    fctx.beginPath(); fctx.moveTo(vx + i * 6, hz); fctx.lineTo(xb + (xb - vx) * 1.6, 1080); fctx.stroke();
+  }
+  const off = (t * 0.22) % 1;
+  for (let j = 0; j < 14; j++) {
+    const k = (j + off) / 14;
+    const y = hz + Math.pow(k, 2.4) * (1080 - hz);
+    fctx.strokeStyle = `rgba(90,170,255,${0.14 * a * k})`;
+    fctx.beginPath(); fctx.moveTo(0, y); fctx.lineTo(1920, y); fctx.stroke();
+  }
+}
+
+// ---------- Геометрия вышки: список отрезков, рисуются снизу вверх ----------
+const segs = [];
+function addSeg(pts, w = 3) {
+  const lens = [0];
+  for (let i = 1; i < pts.length; i++) lens.push(lens[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const hMid = -pts.reduce((s, p) => s + p[1], 0) / pts.length;
+  segs.push({ pts, lens, len: lens[lens.length - 1], w, h: hMid, hMin: Math.min(...pts.map(p => -p[1])) });
+}
+(function buildTower() {
+  for (let i = 0; i < LEVELS.length - 1; i++) {
+    const h0 = LEVELS[i] * T_H, h1 = LEVELS[i + 1] * T_H;
+    // ноги — по кривой силуэта
+    [-1, 1].forEach(s => {
+      const pts = [];
+      for (let k = 0; k <= 8; k++) { const h = lerp(h0, h1, k / 8); pts.push([s * hw(h), -h]); }
+      addSeg(pts, 3.4);
+    });
+    // раскосы крест-накрест
+    addSeg([[-hw(h0), -h0], [hw(h1), -h1]], 1.8);
+    addSeg([[hw(h0), -h0], [-hw(h1), -h1]], 1.8);
+    // поперечина
+    if (i > 0) addSeg([[-hw(h0), -h0], [hw(h0), -h0]], 2.2);
+  }
+  // смотровая площадка
+  addSeg([[-46, -T_H], [46, -T_H]], 3);
+  addSeg([[-36, -T_H - 10], [36, -T_H - 10]], 1.6);
+  addSeg([[-46, -T_H], [-36, -T_H - 10]], 1.6);
+  addSeg([[46, -T_H], [36, -T_H - 10]], 1.6);
+  // мачта
+  addSeg([[0, -T_H - 10], [0, -T_H - MAST]], 3);
+  addSeg([[-9, -T_H - 34], [9, -T_H - 34]], 1.6);
+  addSeg([[-6, -T_H - 54], [6, -T_H - 54]], 1.6);
+  // время начала каждого отрезка — по высоте его нижней точки
+  segs.forEach(s => { s.t0 = DRAW0 + (s.hMin / (T_H + MAST)) * (DRAW1 - DRAW0 - 0.55); s.t1 = s.t0 + 0.55; });
+})();
+const BEACON_Y = -T_H - MAST - BEACON_R - 3;   // центр маяка
+const TOWER_TOP = BEACON_Y - BEACON_R;         // верхняя точка знака
+
+// ---------- Измерения и раскладка ----------
+const lctx = $("logo").getContext("2d");
+const FONT_WORD = `600 ${WORD_SIZE}px "Inter Display"`;
+let M;
+
+function measure() {
+  lctx.font = FONT_WORD;
+  const letters = [...WORD].map(ch => {
+    const mm = lctx.measureText(ch);
+    return { ch, adv: mm.width, abl: mm.actualBoundingBoxLeft, abr: mm.actualBoundingBoxRight };
+  });
+  const capH = lctx.measureText("Н").actualBoundingBoxAscent;
+  // Вертикаль: [маяк … основание вышки] — отступ — [высота прописных]; хвосты «Ц» в расчёт не входят
+  const towerH = -TOWER_TOP;
+  const gap = capH * GAP_TOWER_WORD;
+  const total = towerH + gap + capH;
+  const top = 540 + OPTICAL_Y - total / 2;
+  M = { letters, capH, baseY: top + towerH, wordBase: top + towerH + gap + capH, top };
+  M.beacon = [960, M.baseY + BEACON_Y];
+}
+
+function wordLayout(track) {
+  const L = M.letters;
+  const xs = []; let x = 0;
+  L.forEach((l, i) => { xs.push(x); x += l.adv + (i < L.length - 1 ? track : 0); });
+  const inkL = xs[0] - L[0].abl;
+  const inkR = xs[L.length - 1] + L[L.length - 1].abr;
+  const shift = 960 - (inkL + inkR) / 2;
+  return { xs: xs.map(v => v + shift), left: inkL + shift, right: inkR + shift };
+}
+
+// ---------- Отрисовка вышки ----------
+function partialPath(ctx, s, k) {
+  const target = s.len * k;
+  ctx.moveTo(s.pts[0][0], s.pts[0][1]);
+  for (let i = 1; i < s.pts.length; i++) {
+    if (s.lens[i] <= target) { ctx.lineTo(s.pts[i][0], s.pts[i][1]); continue; }
+    const f = (target - s.lens[i - 1]) / (s.lens[i] - s.lens[i - 1]);
+    ctx.lineTo(lerp(s.pts[i - 1][0], s.pts[i][0], f), lerp(s.pts[i - 1][1], s.pts[i][1], f));
+    break;
+  }
+}
+
+function drawTower(t) {
+  const ctx = lctx;
+  ctx.save();
+  ctx.translate(960, M.baseY);
+
+  // стеклянный силуэт — проявляется с маяком
+  const glass = eo3(prog(t, REVEAL - 0.2, REVEAL + 1.2));
+  if (glass > 0) {
+    ctx.beginPath();
+    for (let k = 0; k <= 30; k++) { const h = T_H * k / 30; ctx.lineTo(-hw(h), -h); }
+    for (let k = 30; k >= 0; k--) { const h = T_H * k / 30; ctx.lineTo(hw(h), -h); }
+    ctx.closePath();
+    const g = ctx.createLinearGradient(0, -T_H, 0, 0);
+    g.addColorStop(0, `rgba(150,205,255,${0.22 * glass})`);
+    g.addColorStop(1, `rgba(70,160,255,${0.03 * glass})`);
+    ctx.fillStyle = g; ctx.fill();
+  }
+
+  // линии: при прорисовке — голубые с ярким «пером», после маяка светлеют
+  const lit = eo3(prog(t, REVEAL - 0.1, REVEAL + 0.8));
+  const g = ctx.createLinearGradient(0, TOWER_TOP, 0, 0);
+  g.addColorStop(0, COL.line0); g.addColorStop(1, lit > 0 ? COL.line0 : COL.line1);
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.shadowColor = COL.glow; ctx.shadowBlur = lerp(8, 16, lit);
+  segs.forEach(s => {
+    const k = eio2(prog(t, s.t0, s.t1));
+    if (k <= 0) return;
+    ctx.globalAlpha = lerp(0.75, 1, lit);
+    ctx.strokeStyle = lit > 0 ? `rgba(255,255,255,${lerp(0.8, 1, lit)})` : COL.line1;
+    if (lit > 0.5) ctx.strokeStyle = g;
+    ctx.lineWidth = s.w;
+    ctx.beginPath(); partialPath(ctx, s, k); ctx.stroke();
+  });
+
+  // маяк
+  const b = eo4(prog(t, REVEAL - 0.15, REVEAL + 0.25));
+  if (b > 0) {
+    const pulse = 1 + 0.12 * Math.sin((t - REVEAL) * 5.2) * Math.exp(-(t - REVEAL) * 0.6);
+    ctx.globalAlpha = 1;
+    ctx.shadowColor = `rgba(${COL.rule},1)`; ctx.shadowBlur = 24 * b;
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath(); ctx.arc(0, BEACON_Y, BEACON_R * b * pulse, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+// Дуги сигнала по бокам маяка — бирюзовый акцент, как линии у слова
+function drawArcs(t) {
+  const ctx = lctx;
+  const [bx, by] = M.beacon;
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.shadowColor = `rgba(${COL.rule},.8)`; ctx.shadowBlur = 10;
+  [26, 46, 66].forEach((r, i) => {
+    const k = eo3(prog(t, REVEAL + 0.05 + i * 0.14, REVEAL + 0.6 + i * 0.14));
+    if (k <= 0) return;
+    const breathe = 0.75 + 0.25 * Math.cos((t - REVEAL) * 2.4 - i * 0.9);
+    ctx.globalAlpha = k * (i === 2 ? 0.55 : i === 1 ? 0.8 : 1) * (t > REVEAL + 1.5 ? breathe : 1);
+    ctx.strokeStyle = `rgb(${COL.rule})`;
+    ctx.lineWidth = 3;
+    const span = 0.62 * k;
+    [0, Math.PI].forEach(a0 => {
+      ctx.beginPath(); ctx.arc(bx, by, r, a0 - span, a0 + span); ctx.stroke();
+    });
+  });
+  ctx.restore();
+}
+
+// Волны эфира: тонкие кольца расходятся от маяка через весь кадр
+const wctx = $("waves").getContext("2d");
+function drawWaves(t) {
+  wctx.clearRect(0, 0, 1920, 1080);
+  const [bx, by] = M.beacon;
+  PULSES.forEach((p0, i) => {
+    const k = prog(t, p0, p0 + 2.6);
+    if (k <= 0 || k >= 1) return;
+    const r = lerp(30, 1500, eo3(k));
+    const a = (1 - k) * (1 - k) * (i === 3 ? 0.35 : 0.6);
+    wctx.lineWidth = lerp(3, 1, k);
+    wctx.strokeStyle = `rgba(${COL.wave},${a})`;
+    wctx.beginPath(); wctx.arc(bx, by, r, 0, Math.PI * 2); wctx.stroke();
+  });
+}
+
+function drawWord(t) {
+  const w = eo4(prog(t, WORD0, WORD0 + 1.6));
+  if (w <= 0) return;
+  const lay = wordLayout(lerp(1.0, TRACK, w) * WORD_SIZE);
+  const ctx = lctx;
+  ctx.save();
+  ctx.font = FONT_WORD; ctx.fillStyle = "#ffffff";
+  M.letters.forEach((l, k) => {
+    ctx.globalAlpha = eo3(prog(t, WORD0 + k * 0.06, WORD0 + 0.9 + k * 0.06));
+    ctx.fillText(l.ch, lay.xs[k], M.wordBase);
+  });
+  ctx.restore();
+}
+
+function drawRules(t) {
+  const r = eio3(prog(t, WORD0 + 0.6, WORD0 + 2.0));
+  if (r <= 0) return;
+  const fin = wordLayout(TRACK * WORD_SIZE);
+  const ctx = lctx;
+  const y = Math.round(M.wordBase - M.capH / 2) + 0.5;
+  const gap = M.capH * RULE_GAP, len = M.capH * RULE_LEN * r;
+  ctx.save();
+  ctx.lineWidth = 2;
+  [[fin.left - gap, -1], [fin.right + gap, 1]].forEach(([x, dir]) => {
+    const g = ctx.createLinearGradient(x, 0, x + dir * M.capH * RULE_LEN, 0);
+    g.addColorStop(0, `rgba(${COL.rule},.95)`); g.addColorStop(1, `rgba(${COL.rule},0)`);
+    ctx.strokeStyle = g;
+    ctx.beginPath(); ctx.moveTo(Math.round(x), y); ctx.lineTo(Math.round(x + dir * len), y); ctx.stroke();
+  });
+  ctx.restore();
+}
+
+// ---------- Блики ----------
+const fl = $("flare").getContext("2d");
+function flare(t) {
+  fl.clearRect(0, 0, 1920, 1080);
+  // «перо» прорисовки: мягкое свечение поднимается по вышке вместе с линиями
+  const d = prog(t, DRAW0, DRAW1);
+  if (d > 0 && t < REVEAL + 0.2) {
+    const y = M.baseY - d * (T_H + MAST);
+    const a = Math.sin(Math.PI * d) * 0.5 + 0.15;
+    const c = fl.createRadialGradient(960, y, 0, 960, y, 220);
+    c.addColorStop(0, `rgba(170,215,255,${0.28 * a})`); c.addColorStop(1, "rgba(70,160,255,0)");
+    fl.fillStyle = c; fl.fillRect(0, 0, 1920, 1080);
+  }
+  // вспышка маяка — горизонтальный блик, как у «1» в «1 СТУДИЯ»
+  const a = prog(t, REVEAL - 0.15, REVEAL + 0.1) * (1 - eo3(prog(t, REVEAL + 0.1, REVEAL + 1.6)));
+  if (a <= 0) return;
+  const [bx, by] = M.beacon;
+  const g = fl.createRadialGradient(bx, by, 0, bx, by, 900);
+  g.addColorStop(0, `rgba(200,240,250,${0.6 * a})`);
+  g.addColorStop(0.08, `rgba(0,178,202,${0.25 * a})`);
+  g.addColorStop(1, "rgba(70,160,255,0)");
+  fl.save(); fl.translate(bx, by); fl.scale(1, 0.035); fl.translate(-bx, -by);
+  fl.fillStyle = g; fl.fillRect(0, 0, 1920, 1080); fl.restore();
+  const c = fl.createRadialGradient(bx, by, 0, bx, by, 240);
+  c.addColorStop(0, `rgba(220,245,255,${0.4 * a})`); c.addColorStop(1, "rgba(70,160,255,0)");
+  fl.fillStyle = c; fl.fillRect(0, 0, 1920, 1080);
+}
+
+function shine(t) {
+  const s = prog(t, SHINE, SHINE + 1.4);
+  if (s <= 0 || s >= 1) return;
+  const ctx = lctx;
+  const x = lerp(520, 1400, eio2(s));
+  const g = ctx.createLinearGradient(x - 120, 0, x + 120, 0);
+  g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(0.5, "rgba(255,255,255,.8)"); g.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.save();
+  ctx.globalCompositeOperation = "source-atop";
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.transform(1, 0, -0.3, 1, 0, 0);
+  ctx.fillStyle = g; ctx.fillRect(x - 400, 0, 1200, 1080);
+  ctx.restore();
+}
+
+const gctx = $("grain").getContext("2d");
+const gimg = gctx.createImageData(960, 540);
+function grain(frame) {
+  let s = ((frame + 5) * 2654435761) >>> 0;
+  const d = gimg.data;
+  for (let i = 0; i < d.length; i += 4) {
+    s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0;
+    d[i] = d[i + 1] = d[i + 2] = s & 255; d[i + 3] = 255;
+  }
+  gctx.putImageData(gimg, 0, 0);
+}
+
+window.DURATION = END;
+window.render = function (t, fps = 25) {
+  if (!M) measure();
+
+  const fly = eio3(prog(t, 0, REVEAL + 1.2));
+  const camZ = lerp(-200, 2300, fly) + t * 25;
+  const camRY = lerp(9, 0, fly) + Math.sin(t * 0.4) * 0.6;   // заход с другой стороны, чем у «1 СТУДИЯ»
+  const camX = lerp(-160, 0, fly);
+  $("cam").style.transform = `rotateY(${camRY}deg) translate3d(${-camX}px, 0, ${camZ}px)`;
+  const settle = eo3(prog(t, REVEAL - 0.3, REVEAL + 1.5));
+  panels.forEach(p => {
+    const worldZ = p.z + camZ;
+    const near = clamp((worldZ - 300) / 700);
+    const far = clamp((worldZ + 4200) / 1600);
+    p.el.style.opacity = (far * (1 - near) * lerp(1, 0.32, settle)).toFixed(3);
+    p.el.style.transform = `translate3d(${p.x + p.drift * t}px, ${p.y}px, ${p.z}px) rotateY(${p.ry}deg)`;
+    p.el.style.filter = settle > 0.01 ? `blur(${(settle * 6).toFixed(1)}px)` : "none";
+  });
+
+  floor(t, eio2(prog(t, 0, 1.6)) * lerp(1, 0.65, eo3(prog(t, REVEAL, REVEAL + 2))));
+  $("beam").style.opacity = lerp(0.2, 1, eio2(prog(t, REVEAL - 1, REVEAL + 0.6)));
+
+  drawWaves(t);
+  lctx.setTransform(1, 0, 0, 1, 0, 0);
+  lctx.clearRect(0, 0, 1920, 1080);
+  drawTower(t);
+  drawArcs(t);
+  drawWord(t);
+  shine(t);
+  drawRules(t);
+  flare(t);
+
+  $("stage").style.filter = `brightness(${(1 - eio2(prog(t, END - 0.7, END))) * eio2(prog(t, 0, 0.6))})`;
+  grain(Math.round(t * fps));
+};
+
+// Отладка сетки: render(t) затем showGrid()
+window.showGrid = function () {
+  const c = lctx; c.save(); c.strokeStyle = "rgba(255,0,80,.8)"; c.lineWidth = 1;
+  const fin = wordLayout(TRACK * WORD_SIZE);
+  [[960, 0, 960, 1080], [0, 540, 1920, 540], [0, M.top, 1920, M.top], [0, M.baseY, 1920, M.baseY],
+   [0, M.wordBase - M.capH, 1920, M.wordBase - M.capH], [0, M.wordBase, 1920, M.wordBase],
+   [fin.left, 0, fin.left, 1080], [fin.right, 0, fin.right, 1080]]
+    .forEach(([a, b, x, y]) => { c.beginPath(); c.moveTo(a + .5, b + .5); c.lineTo(x + .5, y + .5); c.stroke(); });
+  c.restore();
+};
+
+document.fonts.load(FONT_WORD).then(() => document.fonts.ready)
+  .then(() => { measure(); window.render(0); window.READY = true; });
+</script>
+</body>
+</html>
