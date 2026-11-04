@@ -1,5 +1,5 @@
 // Рендер заставки покадрово через Chromium → ffmpeg.
-// Запуск: node render.js [v1|v2|v3] [mp4|prores|dnxhd|png|all] [fps]
+// Запуск: node render.js [v1|v2|v3|v4] [mp4|prores|dnxhd|png|all] [fps]
 //   node render.js v2 all       — вариант 2 со звуком во всех форматах
 //   node render.js mp4          — вариант 1 (для совместимости со старым вызовом)
 // Результат — в папке out/ рядом со скриптом.
@@ -12,6 +12,7 @@ const VARIANTS = {
   v1: { html: "zastavka.html", name: "1_studiya_zastavka" },
   v2: { html: "zastavka_v2.html", name: "1_studiya_v2", audio: "zvuk_v2.wav" },
   v3: { html: "zastavka_v3.html", name: "1_studiya_v3", audio: "zvuk_v3.wav" },
+  v4: { html: "zastavka_v4.html", name: "1_studiya_v4", audio: "zvuk_v4.wav" },
 };
 let args = process.argv.slice(2);
 const variant = VARIANTS[args[0]] ? args.shift() : "v1";
